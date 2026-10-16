@@ -1,0 +1,13 @@
+# Only the mod itself is tracked. The research scripts, game dumps, scans
+# and logs in this folder stay on this machine.
+/*
+!/.gitignore
+!/README.md
+!/BACKSTORY.txt
+!/addon/
+!/release/
+!/tools/
+/addon/backups/
+/addon/build/
+/addon/__pycache__/
+/release/*.zip

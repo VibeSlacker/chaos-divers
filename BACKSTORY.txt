@@ -1,0 +1,58 @@
+CHAOS DIVERS: DISSIDENT DISCOVERY
+Backstory, by vibeslacker
+
+THE STORY
+
+It starts as a routine drop.
+
+Then the truth comes out. The SEAF squads on the ground are enemy
+sympathisers. They are the ones who have been building the broadcast
+towers and sabotaging Super Earth from the inside.
+
+Caught in the open, and too arrogant to hide it any longer, they turn
+their guns on the Helldivers. They fight alongside whoever holds the
+planet: the Illuminate on squid worlds, the Terminids on bug worlds,
+the Automatons on bot worlds.
+
+Command is behind, lacking the intel. It still calls in SEAF as
+friendly support and still lists them as allies on the comms. They are
+not. Every Pelican that lands brings more dissidents to the fight.
+
+
+COMMS BLACKOUT
+
+The broadcast towers were never just propaganda. Every one the
+dissidents raised is a relay in a jamming net, and the moment the cell
+is exposed they light it up.
+
+Your uplink to the Super Destroyer drops to static. No voice, no data,
+no kill reports going up.
+
+The towers do worse than jam. They spoof the feed. Every SEAF
+transponder on the planet still broadcasts a clean friendly tag, so
+what the Destroyer sees from orbit is a squad of loyal troops fighting
+alongside you. That is why command keeps sending Pelicans full of
+"reinforcements." That is why no penalty comes down when a traitor in
+SEAF armor drops to your rifle. As far as the ship can tell, nothing
+happened.
+
+Only one thing gets through: the stratagem beacon. It is a hardened
+short burst, coordinates only and nothing else, and it punches through
+the noise. The Destroyer will still drop what you ask for. It just has
+no idea who you are aiming it at.
+
+You are alone down here with nobody to warn and nobody to listen.
+
+Complete the mission.
+
+
+IN GAME
+
+When rebel mode switches on, the screen shows:
+
+    DISSIDENT CELL DISCOVERED
+    SEAF FORCES HAVE TURNED HOSTILE.
+
+Rebel SEAF fight with the enemy holding the map. Your guard dog and
+sentries stay on your side and engage the rebels. Killing rebels does
+not mark you as a traitor or bring the destroyer down on you.

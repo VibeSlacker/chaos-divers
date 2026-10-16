@@ -1,0 +1,94 @@
+[
+{
+ "name": "faction_manager",
+ "hex": "894df88b4b103b0d00000000f20f1145f0745b488b3d0000000033d2448b8f58200100448b9760200100440fafd1",
+ "mask": "ffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff",
+ "anchor": "45f0745b",
+ "anchor_offset": 15,
+ "extract_offset": 22,
+ "extract_end": 26,
+ "site": "game.dll+0xBB2A2 in the function at +0xBAFB0: mov    rdi,QWORD PTR [rip+0x326ba0f]        # 0x3326cb8",
+ "symbol": "faction_manager"
+},
+{
+ "name": "mission_state",
+ "hex": "49897b20418d7e0f4d896be04d897bd84c8b3d0000000049896b180f1f40000f1f8400000000004a8b8cf6e8000000",
+ "mask": "ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffff",
+ "anchor": "20418d7e",
+ "anchor_offset": 3,
+ "extract_offset": 19,
+ "extract_end": 23,
+ "site": "game.dll+0x4DBC39 in the function at +0x4DBBF0: mov    r15,QWORD PTR [rip+0x2fa1210]        # 0x347ce50",
+ "symbol": "mission_state"
+},
+{
+ "name": "traitor_tally",
+ "hex": "4883ec08488b014c8b1d0000000048897c2428488bf98b40083b0500000000750ab8ffffffffe900000000458b8bc0040000",
+ "mask": "ffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffff",
+ "anchor": "8b8bc004",
+ "anchor_offset": 44,
+ "extract_offset": 10,
+ "extract_end": 14,
+ "site": "game.dll+0x4B4497 in the function at +0x4B4490: mov    r11,QWORD PTR [rip+0x2e720ea]        # 0x3326588",
+ "symbol": "traitor_tally"
+},
+{
+ "name": "detector",
+ "hex": "4883ec083b15000000004c8b15000000007517b8ffffffff8bc84869c1f8130000490342504883c408c3458b4a38",
+ "mask": "ffffffffffff00000000ffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+ "anchor": "4869c1f8",
+ "anchor_offset": 26,
+ "extract_offset": 13,
+ "extract_end": 17,
+ "site": "game.dll+0xB8C4A in the function at +0xB8C40: mov    r10,QWORD PTR [rip+0x326d8f7]        # 0x3326548",
+ "symbol": "detector"
+},
+{
+ "name": "ui_material",
+ "hex": "488bcbe800000000baa1e743d1488bcbe800000000488b15000000004533c0488bcb488b5228e800000000f30f100500000000",
+ "mask": "ffffffff00000000ffffffffffffffffff00000000ffffff00000000ffffffffffffffffffffff00000000ffffffff00000000",
+ "anchor": "baa1e743",
+ "anchor_offset": 8,
+ "extract_offset": 24,
+ "extract_end": 28,
+ "site": "game.dll+0x17D4FA1 in the function at +0x17D4AF0: mov    rdx,QWORD PTR [rip+0x1ff04d0]        # 0x37c5478",
+ "symbol": "material",
+ "optional": true
+},
+{
+ "name": "ui_font",
+ "hex": "c74424780000803f41ff9238010000488b0500000000488d1500000000488b1d00000000410f28dc488b4e084c8bc3",
+ "mask": "ffffffffffffffffffffffffffffffffffff00000000ffffff00000000ffffff00000000ffffffffffffffffffffff",
+ "anchor": "3f41ff92",
+ "anchor_offset": 7,
+ "extract_offset": 32,
+ "extract_end": 36,
+ "site": "game.dll+0x140ECF6 in the function at +0x140E3B0: mov    rbx,QWORD PTR [rip+0x236356b]        # 0x3772268",
+ "symbol": "font",
+ "optional": true
+},
+{
+ "name": "ui_atlas",
+ "hex": "f3440f592500000000488b3d00000000f3450f108e24010000488b3500000000410f28cc450f28dcf30f590d00000000",
+ "mask": "ffffffffff00000000ffffff00000000ffffffffffffffffffffffff00000000ffffffffffffffffffffffff00000000",
+ "anchor": "108e2401",
+ "anchor_offset": 19,
+ "extract_offset": 28,
+ "extract_end": 32,
+ "site": "game.dll+0x1388054 in the function at +0x1387D00: mov    rsi,QWORD PTR [rip+0x23eae8d]        # 0x3772ee8",
+ "symbol": "atlas",
+ "optional": true
+},
+{
+ "name": "network",
+ "hex": "0f84000000000f1f440000498b8cebe80000004533c9488b0500000000448b4108488b98a8b300004585d20f8400000000",
+ "mask": "ffff00000000ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffff00000000",
+ "anchor": "8b8cebe8",
+ "anchor_offset": 12,
+ "extract_offset": 25,
+ "extract_end": 29,
+ "site": "game.dll+0x4C375B in the function at +0x4C3710: mov    rax,QWORD PTR [rip+0x2fb978e]        # 0x347cef0",
+ "symbol": "network",
+ "optional": true
+}
+]

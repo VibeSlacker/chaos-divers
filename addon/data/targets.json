@@ -1,0 +1,66 @@
+{
+ "_about": "What the Chaos Divers addon needs from game.dll, as offsets in game build 25480438, for tools/make_sigs.py (run on gamedump/game-25480438.mem). faction_manager: the unit list with each unit's side. mission_state: the object whose +0x2FC84 is the SEAF kill count and +0x2FC80 the value before it. traitor_tally: the object whose +0x450 holds 16 four-byte tallies of friendly kills (six = traitor), ids at +0x410, timer at +0x494. detector: the DetectorComponent manager (lookup table at +0x30, records of 0x13F8 bytes at +0x50); each record's +0x13E8 is that unit's own copy of its side, which is what it judges targets against. ui_font, ui_atlas, ui_material (optional, from the Passive Picker project): the game's own font, its atlas and the holder of its font material, for the on-screen banner (0.8). network (0.9, optional): the network context, for the host-only key.",
+ "build": 25480438,
+ "code_end": "0x2111000",
+ "targets": [
+  {
+   "name": "faction_manager",
+   "symbol": "faction_manager",
+   "rva": "0x3326CB8"
+  },
+  {
+   "name": "mission_state",
+   "symbol": "mission_state",
+   "rva": "0x347CE50"
+  },
+  {
+   "name": "traitor_tally",
+   "symbol": "traitor_tally",
+   "rva": "0x3326588"
+  },
+  {
+   "name": "detector",
+   "symbol": "detector",
+   "rva": "0x3326548"
+  },
+  {
+   "name": "ui_material",
+   "symbol": "material",
+   "rva": "0x37C5478",
+   "avoid": [
+    [
+     "0x1388030",
+     "0x1388096"
+    ]
+   ],
+   "optional": true
+  },
+  {
+   "name": "ui_font",
+   "symbol": "font",
+   "rva": "0x3772268",
+   "avoid": [
+    [
+     "0x1388030",
+     "0x1388096"
+    ]
+   ],
+   "optional": true
+  },
+  {
+   "name": "ui_atlas",
+   "symbol": "atlas",
+   "rva": "0x3772EE8",
+   "avoid": [],
+   "optional": true,
+   "_note": "the game's code points at the atlas from one place only, so this one cannot move; it gets its own window on that place"
+  },
+  {
+   "name": "network",
+   "symbol": "network",
+   "rva": "0x347CEF0",
+   "optional": true,
+   "_note": "0.9: the game's network context (Better Lobby Management's CONTEXT_PTR, build 25480438): this player's peer id at +0xB398, the host's at +0xB3A8; equal = this game hosts"
+  }
+ ]
+}
