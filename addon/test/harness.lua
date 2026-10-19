@@ -1,4 +1,4 @@
--- Offline test for the Chaos Divers addon (test build 0.10 renames it to Dissident Discovery; 0.9 restyles the banner after the game's MISSION COMPLETED and makes the key host-only; 0.8 adds the on-screen banner; 0.7: rebel mode sets the SEAF soldiers, never a Helldiver,
+-- Offline test for the Chaos Divers addon (test build 0.29 takes the card with E only; 0.28 picks the same card on every machine; 0.25 replaces a lost card with the nearest lore object and says INTEL MOVED; 0.24 picks the rebel side from a single enemy unit; 0.23 reads the engine world list at helldivers2.exe+0x1A10208; 0.22 never calls Gui.update_text (it hung the game on any later frame) and rebuilds the marker on a move; 0.21 never places text off screen (the 0.20 trace caught Gui.update_text to -1000 hanging the game); 0.20 traces the map marker step by step and adds the marker setting; 0.19 takes positions from the unit table and hides the twist; 0.18 redraws the map marker smooth; 0.17 adds the voice call; 0.16 leaves the gas mortar sentry alone; 0.15 adds position diagnostics; 0.14 the map marker; 0.13 the key card; 0.12 a read-only position probe; 0.11 renames it to Dissidents Among Us; 0.10 to Dissident Discovery; 0.9 restyles the banner after the game's MISSION COMPLETED and makes the key host-only; 0.8 adds the on-screen banner; 0.7: rebel mode sets the SEAF soldiers, never a Helldiver,
 -- on the side of the enemy holding the map unless the settings file forces one).
 -- Builds a fake game in memory (a fake game.dll image holding the four signatures, a faction manager with a
 -- unit list, a detector table with records, a mission-state object with the kill count, the traitor tally),
@@ -60,9 +60,9 @@ do
 	assert(#sigs == 8, "expected 8 signatures (4 needed, 3 font, 1 network), got " .. #sigs)
 end
 
-local IMAGE = 0x200000
+local IMAGE = mode == "card" and 0x3480000 or 0x200000   -- card: big enough for the interactable (+0x3326D68) and HUD (+0x346D538) slots
 local image = alloc(IMAGE)
-w32(image + 0x3C, 0x100); w32(image + 0x100, 0x00004550); w32(image + 0x108, 12345); w32(image + 0x150, IMAGE)
+w32(image + 0x3C, 0x100); w32(image + 0x100, 0x00004550); w32(image + 0x108, mode == "card" and 1790161983 or 12345); w32(image + 0x150, IMAGE)
 local slot_of, next_slot, next_code = {}, 0x100000, 0x1000
 for _, s in ipairs(sigs) do
 	slot_of[s.symbol] = image + next_slot; next_slot = next_slot + 16
@@ -92,7 +92,9 @@ local function set_units(list)   -- { { type = "hd"|"other", side =, record =, c
 		if not u.at then u.at = alloc(16); u.id = u.id or (0x1000000 + #buffers) end
 		local unit = u.at
 		w32(unit + 8, u.id)
-		if u.type == "hd" then w32(unit, HD[1]); w32(unit + 4, HD[2]) else w32(unit, 0x11111111); w32(unit + 4, 0x22222222) end
+		if u.type == "hd" then w32(unit, HD[1]); w32(unit + 4, HD[2])
+		elseif u.t then w32(unit, u.t[1]); w32(unit + 4, u.t[2])
+		else w32(unit, 0x11111111); w32(unit + 4, 0x22222222) end
 		wptr(ents + 8 * (i - 1), unit)
 		w32(recs + 0x60 * (i - 1), u.record); w32(recs + 0x60 * (i - 1) + 0xC, u.copy or u.side)
 		w32(masks + 4 * (i - 1), u.side)
@@ -197,6 +199,84 @@ if mode == "banner" then
 	})
 	os.clock = function () return clock end
 end
+-- card mode: the game's interactable manager and the engine's unit lookups
+-- card mode: the game's interactable manager (records name the resource and the unit, +12) and helldivers2.exe's
+-- unit table ([exe+0x1A100F0] -> objects +0x88, count +0x98; object: own id +8, poses +0x88 -> root x, y, z at +48).
+-- A unit stand-in writes its position into memory when .pos is set and goes stale when .dead is set.
+local card_units = {}
+local function unit_standin(obj, id)
+	local data = { pos = { x = 0, y = 0, z = 0 }, dead = false }
+	local poses = alloc(64)
+	wptr(obj + 0x88, poses); w32(obj + 8, id)
+	local function put()
+		ffi.cast("float *", poses + 48)[0] = data.pos.x; ffi.cast("float *", poses + 52)[0] = data.pos.y; ffi.cast("float *", poses + 56)[0] = data.pos.z
+		w32(obj + 8, data.dead and (id + 0x400000) or id)
+	end
+	put()
+	return setmetatable({}, { __index = data, __newindex = function (_, k, v) data[k] = v; put() end })
+end
+local diver
+if mode == "card" then
+	local items = { { "39ff099af9a96f1b", 49, 10 }, { "dd0c24c43731dd8c", 49, 30 }, { "79ccffd281e3f3a9", 4, 50 }, { "4d1c334d294dfa97", 41, 0 } }
+	local itm = alloc(0x14100)
+	local irecs, ists = alloc(8 * #items), alloc(0x370 * #items)
+	wptr(image + 0x3326D68, itm)
+	local h = itm + 0x14038
+	w32(h, 1024); w32(h + 8, #items); wptr(h + 48, irecs); wptr(h + 56, ists)
+	local reg, objs = alloc(0xA0), alloc(8 * 16)
+	wptr(image + 0x1A100F0, reg); wptr(reg + 0x88, objs); w32(reg + 0x98, 16)
+	for i, it in ipairs(items) do
+		local rec = alloc(24)
+		local unit = 0x400000 + i
+		w32(rec, tonumber(it[1]:sub(9), 16)); w32(rec + 4, tonumber(it[1]:sub(1, 8), 16)); w32(rec + 12, unit)
+		wptr(irecs + 8 * (i - 1), rec)
+		w32(ists + 0x370 * (i - 1) + 0x340, 1); w32(ists + 0x370 * (i - 1) + 0x44, it[2])
+		local obj = alloc(0x100); wptr(objs + 8 * i, obj)
+		local u = unit_standin(obj, unit)
+		u.pos = { x = it[3], y = 0, z = 0 }
+		card_units[it[1]] = { u }
+	end
+	diver = card_units["4d1c334d294dfa97"][1]
+	-- the HUD manager with the tactical map (Treasure Map's layout): open flag, centre, pan, zoom, frame
+	local hud = alloc(0x3EF168 + 10464 + 200)
+	wptr(image + 0x346D538, hud)
+	local V = hud + 0x3EF168
+	local function f(a, x) ffi.cast("float *", a)[0] = x end
+	f(V + 288, 20); f(V + 292, 0); f(V + 304, 0); f(V + 308, 0); f(V + 328, 2)   -- centre 20, 0; zoom 2 px a metre
+	f(V + 10464 + 36, 800); f(V + 10464 + 40, 800); f(V + 10464 + 100, 1); f(V + 10464 + 148, 100); f(V + 10464 + 156, 100)
+	card_units.map_open = function (open) ffi.cast("uint8_t *", V + 405)[0] = open and 1 or 0 end
+	card_units.map_pan = function (cx) f(V + 288, cx) end
+	local MAIN, UI = { "main" }, { "ui" }
+	-- the engine's world list (helldivers2.exe+0x1A10208: count +1424, array +1432) and the game context
+	-- (game.dll+0x3326340: Game World +0x10E8, its WwiseWorld +0x10F8); here exe and game.dll are the same image
+	local app, warr, ctx = alloc(1440), alloc(16), alloc(0x1100)
+	local p_main, p_ui = alloc(16), alloc(16)
+	wptr(image + 0x1A10208, app); w32(app + 1424, 2); wptr(app + 1432, warr)
+	wptr(warr, p_main); wptr(warr + 8, p_ui)
+	wptr(image + 0x3326340, ctx); wptr(ctx + 0x10E8, p_main); wptr(ctx + 0x10F8, alloc(16))
+	card_units.posted = {}
+	rawset(_G, "stingray", {
+		Wwise = { wwise_world = function (w) return { ww = w } end, has_event = function (name) return true end },
+		WwiseWorld = { trigger_event = function (ww, name) card_units.posted[#card_units.posted + 1] = { world = ww.ww, name = name } return 77 end },
+		Application = { main_world = function () return MAIN end, worlds = function () return { MAIN, UI } end, can_get = function () return true end },
+		World = { create_screen_gui = function (w) assert(w == UI, "drawn in the main world"); drawn.made = drawn.made + 1
+				local g = { n = drawn.made, texts = {}, rects = {} }; drawn.live[g] = true; drawn.last = g return g end,
+			destroy_gui = function (w, g) assert(drawn.live[g], "destroyed an unknown surface"); drawn.live[g] = nil; drawn.destroyed = drawn.destroyed + 1 end },
+		Gui = { resolution = function () return 1920, 1080 end, material = function () return { ink = true } end,
+			text_extents = function (_, text, _, size) return { 0, 0 }, { #text * size * 0.5, size } end,
+			text = function (g, text, font, size, material, pos, color) assert(pos[1] > -100 and pos[2] > -100, "text placed off screen (hung the game in 0.20)"); g.texts[#g.texts + 1] = { text = text, pos = pos } return #g.texts end,
+			update_text = function (g, id, text, font, size, material, pos, color) error("Gui.update_text called (it hung the game in 0.20 and 0.21)"); g.texts[id] = { text = text, pos = pos } end,
+			rect = function (g, pos, size, color) g.rects[#g.rects + 1] = { pos = pos, size = size, color = color } end,
+			triangle = function (g, a, b, c, layer, color) g.tri_n = (g.tri_n or 0) + 1; g.tris = g.tris or {}; g.tris[g.tri_n] = { a = a, b = b, c = c, layer = layer, color = color } return g.tri_n end,
+			destroy_triangle = function (g, id) error("Gui.destroy_triangle called (0.22 throws the whole surface away instead)") end },
+		Material = { set_scalar = function () end, set_vector2 = function () end, set_vector4 = function () end, set_texture = function () end },
+		Vector2 = setmetatable({ x = function (v) return v[1] end }, { __call = function (_, x, y) return { x, y } end }),
+		Vector3 = function (x, y, z) return { x, y, z } end,
+		Color = function (a, r, g, b) return { a, r, g, b } end,
+		IdString64 = { from_hex = function (h) return "id:" .. h end },
+	})
+	os.clock = function () return clock end
+end
 local function live_count() local n = 0 for _ in pairs(drawn.live) do n = n + 1 end return n end
 -- default mode: a stand-in for Mod Bindings Menu (Vanilla Plus), refusing the first registration try
 local menu = { registered = {}, down = false, refuse = 1 }
@@ -226,7 +306,7 @@ end
 local addon = rawget(_G, "ChaosDivers")
 
 print("start")
-check(addon ~= nil and addon.revision == "Chaos Divers: Dissident Discovery test 0.10", "the addon registered itself as test 0.10")
+check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us test 0.29", "the addon registered itself as test 0.29")
 check(file("ChaosDivers.previous.log") == "OLD SESSION\n", "the last session's log was kept as the previous log")
 check(loadfile(built)() == true and count_lines("loaded (") == 1, "loading it a second time does nothing")
 local before_sum = checksum()
@@ -285,7 +365,7 @@ if mode == "banner" then
 	check(drawn.made == 0, "nothing drawn before rebel mode goes on")
 	clock = 100; press(); run(2)
 	check(addon.rebel.on and last_line("BANNER: DISSIDENT CELL DISCOVERED") ~= nil, "F9 on: rebel mode on and the banner logged")
-	check(live_count() == 1 and #drawn.texts == 2 and drawn.texts[1].text == "DISSIDENT CELL DISCOVERED" and drawn.texts[2].text == "SEAF FORCES HAVE TURNED HOSTILE.", "one surface, the title and the line under it")
+	check(live_count() == 1 and #drawn.texts == 2 and drawn.texts[1].text == "DISSIDENT CELL DISCOVERED" and drawn.texts[2].text == "ENEMY SYMPATHIZERS HAVE TURNED HOSTILE.", "one surface, the title and the line under it")
 	check(drawn.texts[1].color[1] == 255 and drawn.texts[1].color[2] == 255 and drawn.texts[1].color[3] == 130 and drawn.texts[1].color[4] == 31, "the title is solid orange")
 	check(drawn.texts[1].font == "id:1111222233334444" and drawn.material == "id:99990000aaaabbbb" and last_line("banner: drawn in the game's own font") ~= nil, "drawn in the game's own font")
 	local tx = drawn.texts[1].pos[1]; local tw = #"DISSIDENT CELL DISCOVERED" * drawn.texts[1].size * 0.5
@@ -326,6 +406,161 @@ if mode == "banner" then
 	os.exit(failures == 0 and 0 or 1)
 end
 
+if mode == "card" then
+	print("key card")
+	check(addon.card.chosen == nil, "no card picked in the first seconds of a mission")
+	run(1900)
+	check(last_line("KEY CARD: 2 lore objects among 3 interactables; the card is ") ~= nil, "after landing: the two lore objects found (the Helldiver left out, the crate is not lore)")
+	check(last_line("BANNER: NEW INTELLIGENCE DISCOVERED") ~= nil, "the pick shows the NEW INTELLIGENCE DISCOVERED banner (not the twist)")
+	check(last_line("map marker: search area 40 m around") ~= nil and addon.card.area ~= nil, "a search area is set around the card")
+	clock = 50; run(5)
+	check(live_count() == 0, "the banner is gone after its six seconds")
+	local made = drawn.made; run(30)
+	check(drawn.made == made, "map closed: no marker drawn")
+	card_units.map_open(true); run(2)
+	local g = drawn.last
+	check(live_count() == 1 and drawn.made == made + 1 and last_line("map marker: drawn on the tactical map") ~= nil, "map open: the marker is drawn on one surface")
+	local function tris_of(gg) local t = {} for id, tr in pairs(gg.tris or {}) do t[#t + 1] = { id = id, tr = tr } end table.sort(t, function (p, q) return p.id < q.id end) return t end
+	local area = addon.card.area
+	local ex, ey = 100 + 400 + (area.x - 20) * 2, 100 + 400 + (area.y - 0) * 2
+	local t = tris_of(g)
+	check(#t == 48 + 144, "a fill of 48 triangles and a ring of 144 (72 segments)")
+	local fan = t[1].tr
+	check(math.abs(fan.a[1] - ex) < 0.01 and math.abs(fan.a[3] - ey) < 0.01 and fan.a[2] == 0, "the fill's centre lands where the map puts the area (Treasure Map's projection), as Vector3(x, 0, y)")
+	local rx, ry = fan.b[1] - fan.a[1], fan.b[3] - fan.a[3]
+	check(math.abs(math.sqrt(rx * rx + ry * ry) - 80) < 0.01, "the radius is 40 m at the map's zoom")
+	check(fan.layer >= 950 and t[49].tr.layer > fan.layer, "drawn above the game's map layers, the ring over the fill")
+	check(fan.color[1] < 80 and t[49].tr.color[1] > 200, "a faint fill and a solid ring")
+	local label
+	for _, tx in pairs(g.texts) do if tx.text == "INTEL" and tx.pos[1] > 0 then label = tx end end
+	check(label and math.abs(label.pos[2] - (ey + 80 + 5)) < 2, "one label, INTEL, just above the ring")
+	made = drawn.made; local before = t[1].id; run(30)
+	check(drawn.made == made and tris_of(g)[1].id == before, "the map not moving: nothing redrawn")
+	local old, destroyed0 = g, drawn.destroyed
+	card_units.map_pan(25); run(2)
+	g = drawn.last
+	local t2 = tris_of(g)
+	check(drawn.made == made + 1 and drawn.destroyed == destroyed0 + 1 and not drawn.live[old] and live_count() == 1, "the map pans: the old surface is thrown away and a new one built (no update_text)")
+	check(#t2 == 192 and math.abs(t2[1].tr.a[1] - (ex - 10)) < 0.01, "the ring is drawn 10 px over")
+	local moved
+	for _, tx in pairs(g.texts) do if tx.text == "INTEL" and tx.pos[1] > 0 then moved = tx end end
+	check(moved and math.abs(moved.pos[1] - (label.pos[1] - 10)) < 0.01, "the label is drawn 10 px over with it")
+	card_units.map_open(false); run(2)
+	check(live_count() == 0, "map closed: the marker is cleared")
+	card_units.map_open(true); run(2)
+	check(live_count() == 1, "map opened again: drawn again")
+	check(last_line("map trace 1: World.create_screen_gui done") ~= nil and last_line("map trace 1: Gui.triangle done") ~= nil and last_line("map trace 1: done") ~= nil, "the first draw is traced call by call")
+	check(last_line("map trace 1: start (marker 1); area at ") ~= nil and last_line("clear: World.destroy_gui done") ~= nil, "the trace logs where the area lands and the clear on closing")
+	check(last_line("map opened") ~= nil and last_line("map closed") ~= nil, "map open and close are logged")
+	local function reopen(m) addon.test.set_cfg("marker", m); card_units.map_open(false); run(2); card_units.map_open(true); run(2) end
+	local function labels(gg) local n = 0 for _, tx in pairs(gg.texts) do if tx.text == "INTEL" then n = n + 1 end end return n end
+	reopen(2); g = drawn.last
+	check(live_count() == 1 and #tris_of(g) == 192 and labels(g) == 0, "marker = 2: the ring only, no label")
+	reopen(3); g = drawn.last
+	check(live_count() == 1 and #tris_of(g) == 0 and labels(g) == 2, "marker = 3: the label only, no triangles")
+	made = drawn.made; reopen(0)
+	check(live_count() == 0 and drawn.made == made, "marker = 0: nothing drawn with the map open")
+	reopen(1); g = drawn.last
+	check(live_count() == 1 and #tris_of(g) == 192 and labels(g) == 2, "marker = 1: ring and label again")
+	local destroyed = drawn.destroyed
+	card_units.map_pan(area.x + 300); run(2)
+	check(live_count() == 0 and drawn.destroyed == destroyed + 1 and last_line("old surface gone") ~= nil, "the area slides off the map: the whole surface is thrown away, nothing drawn")
+	made = drawn.made; run(30)
+	check(drawn.made == made and live_count() == 0, "while it stays off the map, nothing is drawn")
+	card_units.map_pan(25); run(2); g = drawn.last
+	check(live_count() == 1 and drawn.made == made + 1 and #tris_of(g) == 192 and labels(g) == 2, "back on the map: drawn fresh, ring and label")
+	check(last_line("stopped on error") == nil and last_line("map marker off for this game session") == nil, "the marker stayed on through it")
+	local chosen = addon.card.chosen.res
+	check(chosen == "39ff099af9a96f1b" or chosen == "dd0c24c43731dd8c", "the card is one of the lore objects")
+	local other = chosen == "39ff099af9a96f1b" and card_units["dd0c24c43731dd8c"][1] or card_units["39ff099af9a96f1b"][1]
+	local cp = card_units[chosen][1].pos
+	diver.pos = { x = cp.x, y = 8, z = 0 }; press(69); run(5)
+	check(not addon.rebel.on and last_line("KEY CARD FOUND") == nil, "E pressed eight metres away: nothing")
+	diver.pos = { x = other.pos.x, y = 1, z = 0 }; press(69); run(5)
+	check(not addon.rebel.on and last_line("interact: nearest interactable") ~= nil and last_line("zone type 49, 1.0 m") ~= nil, "E at the other lore object: logged, not the card")
+	diver.pos = { x = cp.x + 3, y = 0, z = 0 }; run(40)
+	check(not addon.rebel.on and last_line("KEY CARD FOUND") == nil, "standing three metres off the card: nothing")
+	diver.pos = { x = cp.x + 1.5, y = 0, z = 0 }; run(40)
+	check(not addon.rebel.on and not addon.card.found and last_line("KEY CARD FOUND") == nil, "standing at the card without E: nothing (walking past does not fire it)")
+	press(69); run(5)
+	check(addon.rebel.on and last_line("KEY CARD FOUND: the dissidents' data is read; switching rebel mode on") ~= nil and last_line("REBEL MODE ON") ~= nil,
+		"E at the card: rebel mode on")
+	check(addon.card.found, "the card counts as found")
+	local mortar = { type = "other", t = { 0xfd2f0994, 0x299c0d3d }, side = 1, record = 24, det = 1 }
+	local soldiers_before = addon.units.soldiers
+	mission[#mission + 1] = mortar; set_units(mission); run(40)
+	check(is(mortar, 1) and addon.units.soldiers == soldiers_before, "the gas mortar sentry (record 24, type 299c0d3dfd2f0994) is left on 0x1 and not counted")
+	check(last_line("SEAF SET") == nil or not last_line("SEAF SET"):find("299c0d3dfd2f0994", 1, true), "no SEAF SET names the mortar's type")
+	run(2); check(live_count() == 0 or (drawn.last and drawn.last.texts[1] and drawn.last.texts[1].text == "DISSIDENT CELL DISCOVERED"), "card found: the marker is cleared (only the rebel banner may show)")
+	clock = 100; run(5); check(live_count() == 0, "with the map still open, nothing more is drawn")
+	print("voice call")
+	local function seaf() return { type = "other", side = 1, record = 24, det = 1 } end
+	check(#card_units.posted == 0, "switching rebel mode on (the first soldiers set) calls nothing")
+	run(700); mission[#mission + 1] = seaf(); mission[#mission + 1] = seaf(); set_units(mission); run(40)
+	check(#card_units.posted == 0, "a SEAF drop: nothing for the first seconds (the game's own SEAF line first)")
+	run(300)
+	local first = card_units.posted[1]
+	check(#card_units.posted == 1 and first.world == stingray.Application.main_world() and last_line("VOICE CALL:") ~= nil,
+		"five seconds after the drop: one call on the Game World (matched in the engine's world list)")
+	local names = { bhhbahfd = "reinforcements", bhhbahfg = "reinforcements", tfrmagno = "hostiles", tfrmagnl = "hostiles", mgqhanez = "unidentified", mgqhaney = "unidentified" }
+	check(first and names[first.name] ~= nil, "one of the six lines")
+	mission[#mission + 1] = seaf(); mission[#mission + 1] = seaf(); set_units(mission); run(400)
+	check(#card_units.posted == 1, "another drop within 45 seconds: no second call")
+	run(2700); mission[#mission + 1] = seaf(); mission[#mission + 1] = seaf(); set_units(mission); run(400)
+	check(#card_units.posted == 2 and names[card_units.posted[2].name] ~= names[first.name], "the next drop: a call with a different line")
+	check(last_line("voice call off") == nil and last_line("voice call skipped") == nil, "no voice errors")
+	local lines = count_lines("KEY CARD FOUND"); press(69); run(5)
+	check(addon.rebel.on and count_lines("KEY CARD FOUND") == lines, "E again: no second trigger, rebel mode stays on")
+	press(); run(5)
+	check(not addon.rebel.on, "F9 still switches it off")
+	set_units(ship); run(40)
+	check(addon.card.chosen == nil and not addon.card.found and not addon.card.mission, "back on the ship: the card is forgotten")
+	diver.pos = { x = -50, y = 0, z = 0 }
+	set_units(mission); run(1900)
+	check(addon.card.chosen ~= nil and count_lines("KEY CARD: 2 lore objects") == 2, "the next mission picks a card")
+	lines_seaf = count_lines("SEAF SET")
+	check(addon.card.chosen.res == chosen and last_line("key card: fingerprint ") ~= nil, "the same map gives the same card again, and the fingerprint is logged")
+	do
+		local pick = addon.test.card_pick
+		local function lore(order) local t = {} for i, v in ipairs(order) do t[i] = { res = v[1], pos = { x = v[2], y = v[3], z = 0 } } end return t end
+		local map = { { "a", 120, -40 }, { "b", -300, 12 }, { "c", 15, 260 }, { "d", 15, -260 }, { "e", 88, 3 } }
+		local c1, a1, o1, s1 = pick(lore(map))
+		local c2, a2, o2, s2 = pick(lore({ map[4], map[2], map[5], map[1], map[3] }))
+		check(c1.res == c2.res and a1 == a2 and o1 == o2 and s1 == s2, "two games listing the same objects in another order pick the same card and the same search area")
+		local moved = lore(map); moved[3].pos.x = 15.2
+		check(pick(moved).res == c1.res, "positions that differ by a fraction of a metre still pick the same card")
+		local seen = {}
+		for k = 1, 40 do local m = lore(map); m[1].pos.x = 120 + k * 7; seen[pick(m).res] = true end
+		local n = 0 for _ in pairs(seen) do n = n + 1 end
+		check(n >= 3, "other maps spread the pick over the objects (not always the first)")
+		check(o1 >= 5 and o1 <= 25 and a1 >= 0 and a1 < 2 * math.pi, "the search area's offset stays 5 to 25 m off the card")
+	end
+	-- a squadmate's game (not the host): same card, shows the banners and the marker, never switches anything
+	set_units(ship); run(40); set_peers(0x0110000100005678ULL, 0x0110000100001234ULL); set_units(mission); run(1900)
+	check(addon.card.chosen and addon.card.chosen.res == chosen and last_line("BANNER: NEW INTELLIGENCE DISCOVERED") ~= nil, "not the host: the same card is picked and announced")
+	local banners = count_lines("BANNER: DISSIDENT CELL DISCOVERED")
+	local cp2 = card_units[chosen][1].pos
+	diver.pos = { x = cp2.x + 1, y = 0, z = 0 }; run(40)
+	check(not addon.card.found and count_lines("BANNER: DISSIDENT CELL DISCOVERED") == banners, "not the host, standing at the card without E: nothing")
+	press(69); run(5)
+	check(addon.card.found and not addon.rebel.on and last_line("this game is not the host, so it only shows it") ~= nil
+		and count_lines("BANNER: DISSIDENT CELL DISCOVERED") == banners + 1, "not the host, E at the card: DISSIDENT CELL DISCOVERED shows, rebel mode stays off")
+	check(last_line("SEAF SET") == nil or count_lines("SEAF SET") == lines_seaf, "not the host: no soldier set")
+	set_units(ship); run(40); set_peers(0x0110000100001234ULL, 0x0110000100001234ULL); diver.pos = { x = -50, y = 0, z = 0 }; set_units(mission); run(1900)
+	card_units[addon.card.chosen.res][1].dead = true; run(1900)
+	check(last_line("key card: the chosen lore object is gone; picking the one nearest to where it was") ~= nil, "the card's object gone: another is picked")
+	check(last_line("key card: the replacement is the lore object nearest the lost one") ~= nil and last_line("BANNER: INTEL MOVED") ~= nil, "the replacement is the nearest, and INTEL MOVED shows")
+	do
+		local near = addon.test.nearest_lore
+		local list = { { res = "far", pos = { x = 500, y = 0, z = 0 } }, { res = "close", pos = { x = 20, y = 5, z = 0 } }, { res = "mid", pos = { x = -60, y = 0, z = 0 } } }
+		local best, d = near(list, { x = 0, y = 0, z = 0 })
+		check(best.res == "close" and math.abs(d - math.sqrt(425)) < 0.01, "nearest_lore picks the closest of three, not the first or a random one")
+	end
+	check(last_line("stopped on error") == nil and last_line("key card off") == nil, "no errors, the card stayed on")
+	print(failures == 0 and "ALL PASSED" or (failures .. " FAILED"))
+	os.exit(failures == 0 and 0 or 1)
+end
+
 if mode == "fresh" then
 	print("defaults: no settings file")
 	local text = file("ChaosDivers.cfg")
@@ -353,8 +588,9 @@ if mode == "auto" then
 	local function home() for _, u in ipairs({ A, B }) do u.side, u.copy, u.det = 1, 1, 1 end end
 	print("auto: no enemy on the map yet")
 	do
+		set_units({ me, A, B, corpse, dog, nodet }); run(20)
 		local snap = snapshot(); press(); run(60)
-		check(addon.rebel.on and #changed(snap) == 0, "on with one squid on the map (under three): nothing written")
+		check(addon.rebel.on and #changed(snap) == 0, "on with no enemy on the map: nothing written")
 		check(count_lines("no enemy on the map yet") == 1, "it says it is waiting, once")
 		check(last_line("REBEL MODE ON: SEAF soldiers are set to the side of the enemy on the map") ~= nil, "switching on names the auto side")
 	end
@@ -363,7 +599,7 @@ if mode == "auto" then
 	do
 		set_units(with({ squid, me, A, B, corpse, dog, nodet }, bots, others)); local snap = snapshot(); run(6)
 		check(is(A, 2) and is(B, 2) and #changed(snap) == 6, "five on 0x2, two on 0x8, one on 0x4: soldiers join 0x2, six values and nothing else")
-		check(last_line("REBEL SIDE: 0x2 (bugs or bots), the enemy on the map (5 on 0x2, 1 on 0x4, 2 on 0x8)") ~= nil, "the choice and the counts are logged")
+		check(last_line("REBEL SIDE: 0x2 (the Terminids), the enemy on the map (5 on 0x2, 1 on 0x4, 2 on 0x8)") ~= nil, "the choice and the counts are logged")
 		check(is(me, 1) and is(dog, 1) and is(squid, 4) and r32(bots[1].at_side) == 2, "he, his dog and the enemies are untouched")
 		A.side, A.copy, A.det, B.side, B.copy, B.det = 2, 2, 2, 2, 2, 2
 	end
@@ -381,8 +617,16 @@ if mode == "auto" then
 	do
 		set_units(with({ me, A, B, dog }, enemies(8, 4), enemies(4, 1))); run(20)
 		press(); run(6)
-		check(addon.rebel.on and is(A, 8) and is(B, 8) and last_line("REBEL SIDE: 0x8 (bugs or bots), the enemy on the map (0 on 0x2, 1 on 0x4, 4 on 0x8)") ~= nil, "on again on a 0x8 map: soldiers join 0x8")
+		check(addon.rebel.on and is(A, 8) and is(B, 8) and last_line("REBEL SIDE: 0x8 (the Automatons), the enemy on the map (0 on 0x2, 1 on 0x4, 4 on 0x8)") ~= nil, "on again on a 0x8 map: soldiers join 0x8")
 		check(addon.units.enemy[4] == 1 and addon.units.enemy[8] == 4, "the rebel soldiers themselves are not counted as the enemy")
+		press(); check(not addon.rebel.on and is(A, 1), "(off)")
+		home()
+	end
+	print("auto: one enemy unit is enough")
+	do
+		set_units(with({ me, A, B, dog }, enemies(2, 1))); run(20)
+		press(); run(6)
+		check(addon.rebel.on and is(A, 2) and is(B, 2) and last_line("REBEL SIDE: 0x2 (the Terminids), the enemy on the map (1 on 0x2, 0 on 0x4, 0 on 0x8)") ~= nil, "one bug on the map: soldiers join 0x2 at once (0.23 waited for three)")
 		press(); check(not addon.rebel.on and is(A, 1), "(off)")
 		home()
 	end
@@ -390,7 +634,7 @@ if mode == "auto" then
 	do
 		write_cfg("side = 2\nguard = 0\n"); set_units({ squid, me, A, B, dog }); run(20)
 		press(); run(2)
-		check(addon.rebel.on and is(A, 2) and is(B, 2) and last_line("REBEL SIDE: 0x2 (bugs or bots), set in the settings file") ~= nil, "side = 2 in the file: soldiers on 0x2 at once, even with one squid on the map")
+		check(addon.rebel.on and is(A, 2) and is(B, 2) and last_line("REBEL SIDE: 0x2 (the Terminids), set in the settings file") ~= nil, "side = 2 in the file: soldiers on 0x2 at once, even with one squid on the map")
 		rawget(_G, "shutdown")()
 		check(is(A, 1) and is(B, 1), "shutdown puts them back")
 	end
@@ -589,6 +833,9 @@ do
 	check(c.squad == 0 and c.guard == 1 and c.guard_at == 1 and note:find("guard_at 9 refused", 1, true) and note:find("squad 2 refused", 1, true), "out-of-range squad, guard and guard_at are refused")
 	c = parse("squad = 1\nguard = 0\nguard_at = 8\n")
 	check(c.squad == 1 and c.guard == 0 and c.guard_at == 8, "squad can be switched on, the guard off; guard_at up to 8")
+	c = parse(""); check(c.marker == 1, "marker defaults to 1 (ring and label)")
+	c = parse("marker = 3\r\n"); check(c.marker == 3, "marker 3 (label only) is read")
+	c, note = parse("marker = 4\n"); check(c.marker == 1 and note:find("marker 4 refused", 1, true), "marker 4 is refused")
 end
 
 if mode == nil then

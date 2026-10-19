@@ -1,4 +1,4 @@
-# Chaos Divers: Dissident Discovery
+# Chaos Divers: Dissidents Among Us
 
 Helldivers 2 mod by **vibeslacker**. Test builds, private while it is being tested. Made with AI: the code is written by an AI and tested in the game by a human.
 
@@ -16,7 +16,7 @@ Python 3 and LuaJIT, run from `addon/`.
 python3 build.py                                                     # build/: the mod
 luajit test/harness.lua build/chaos_divers.built.lua data/sigs.json <scratch dir> [side8|fresh|auto|nosig|banner]
 luajit check.lua build/chaos_divers.built.lua                        # accidental globals; no output = clean
-python3 ../tools/make_release.py build ../release Chaos-Divers-Dissident-Discovery-test-<version>.zip
+python3 ../tools/make_release.py build ../release Chaos-Divers-Dissidents-Among-Us-test-<version>.zip
 ```
 
 - `addon/src/chaos_divers.lua` is the one source; its header explains what it writes and why.

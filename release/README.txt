@@ -1,4 +1,4 @@
-Chaos Divers: Dissident Discovery - TEST BUILD 0.10
+Chaos Divers: Dissidents Among Us - TEST BUILD 0.29
 by vibeslacker
 Made with AI. For testers, not a public release.
 
@@ -21,10 +21,14 @@ idea who you are aiming it at. You are alone down here. Complete the
 mission.
 
 WHAT IT DOES
-- Press F9 in a mission. "DISSIDENT CELL DISCOVERED" shows on screen and
-  every SEAF soldier on the map, and every squad that lands after, turns
-  hostile and sides with the enemy holding the planet (squids, bugs or
-  bots).
+- About half a minute into a mission on a planet with SEAF, "NEW
+  INTELLIGENCE DISCOVERED" shows and an INTEL ring appears on your
+  tactical map. The intel is one of the lore objects inside the ring.
+- Press E at the intel to take it (walking past does nothing). That
+  exposes the cell: "DISSIDENT CELL DISCOVERED" shows, and every SEAF
+  soldier on the map, and every squad that lands after, turns hostile
+  and sides with the enemy holding the planet (squids, bugs or bots).
+- F9 switches it on or off by hand.
 - Your guard dog and sentries stay on your side and fight the rebels.
 - Killing rebels does not mark you as a traitor and the destroyer does not
   come for you.
@@ -46,7 +50,19 @@ INSTALL
 1. Close the game.
 2. Add this zip to your mod manager, along with Bingus Shared Loader.
 3. Enable both and deploy. Loader last.
-4. Start the game, drop on a planet with SEAF, press F9.
+4. Start the game, drop on a planet with SEAF, find the intel.
+
+PLAYING TOGETHER
+- The host's game is the one that turns the SEAF. The host needs the mod,
+  with squad = 1 in the settings file.
+- Squadmates without the mod still get shot at by the rebels, and their
+  kills are kept off the traitor count, but they see no banners and no
+  ring.
+- Everyone should have the mod. Squadmates with it see the same ring on
+  the same spot, and each one presses E at the intel for their own
+  banner. Their copy only shows things; it never changes the game.
+- The copies do not talk to each other: the SEAF turn when the HOST
+  presses E at the intel. Go there together.
 
 SETTINGS AND FILES
 In %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs:
@@ -61,13 +77,14 @@ The main settings:
 - side = 0      0 = join whatever enemy holds the map. 2 = bugs,
                 4 = squids, 8 = bots (bots not tested yet).
 - squad = 0     0 = solo only. 1 = also with other players (private lobby,
-                friends who know; not tested yet).
+                friends who know). The host needs 1 for co-op.
 - banner = 1    0 turns off the on-screen banner.
 
 KNOWN LIMITS (this is a test build)
-- Solo only by default. With another player in the mission it will not
-  switch on. Multiplayer has not been tested.
-- Only the host's key works.
+- Solo only by default (squad = 0). With another player in the mission
+  the host's game will not switch on until squad = 1.
+- Only the host's game turns the SEAF. Co-op with a squadmate without the
+  mod has been tested; squadmates with the mod are being tested now.
 - The requisition fine for killing SEAF still applies in this test build.
   The story says the ship never hears about it; that part is not built
   yet, so you may still be charged. If the mission recap shows a fine,
@@ -77,8 +94,9 @@ KNOWN LIMITS (this is a test build)
 
 WHAT TO SEND BACK
 After a test mission, send ChaosDivers.log and ChaosDivers.previous.log from the
-folder above, and say what you saw: did the banner show, did the SEAF turn
-on you, did your dog and sentries stay loyal, did anything crash.
+folder above, and say what you saw: did the banner show, did the ring
+on your map sit on the same spot as the host's, did the SEAF turn on you,
+did your dog and sentries stay loyal, did anything crash.
 
 GOOD TO KNOW
 - This mod changes game memory while the game runs. It is a gameplay change

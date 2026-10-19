@@ -11,3 +11,6 @@
 /addon/build/
 /addon/__pycache__/
 /release/*.zip
+/addon/tools/__pycache__/
+/addon/tools/audio-research-*/
+/addon/tools/lore-read-probe*

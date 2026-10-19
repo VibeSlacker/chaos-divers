@@ -1,5 +1,5 @@
 -- HD2-Addon: mods/vibeslacker/chaos_divers
--- Chaos Divers: Dissident Discovery (was "Rebel SEAF", then "Dissident Crackdown"), test build 0.10, for Bingus Shared Loader v15+.
+-- Chaos Divers: Dissidents Among Us (was "Rebel SEAF", "Dissident Crackdown", then "Dissident Discovery"), test build 0.29 (the key card taken with E only, the same key card on every machine, a lost card replaced by the nearest lore object, one enemy unit enough to pick the rebel side, map marker rebuilt on every move (no Gui.update_text), step-by-step trace kept, voice call address fixed, sentries left alone, voice call), for Bingus Shared Loader v15+.
 --
 -- Rebel mode: one key (F9 unless the settings file says otherwise) turns the
 -- SEAF soldiers into an enemy side. The same key switches it off again. Off at
@@ -58,6 +58,67 @@
 --
 -- 0.10: renamed to Dissident Discovery; files, global, loader path and bindings id renamed with it
 --       (the files were RebelSEAF.*). No other change.
+-- 0.11: renamed to Dissidents Among Us. Only the name shown changes; files, global, loader path and
+--       bindings id stay chaos_divers. No other change.
+-- 0.12: position probe for the lore key card. In a mission it logs, read-only, which engine
+--       functions exist for units, worlds and the camera, then tries a few unit positions. Three
+--       rounds a minute apart, every call guarded; it writes nothing to the game. (It crashed the game:
+--       engine calls on arbitrary units. Rolled back the same morning; removed in 0.13.)
+-- 0.13: key card. About 30 s into a mission one lore object (zone type 49, in 0.14 12, in the game's interactable
+--       manager) is picked at random; the interact key (E) within 2.5 m of it switches rebel mode on.
+--       Every interact press logs the nearest interactable and its zone type. Settings: card, interact.
+-- 0.14: map marker. The card's search area (40 m around a spot 5 to 25 m off it) is drawn on the tactical
+--       map while it is open (layout from Th3chef's Treasure Map), and a TRANSMISSION INTERCEPTED banner
+--       shows when the card is picked. Gone once the card is found. The card is now picked from zone type 12
+--       (a note, seen in the game; 49 vanished mid-mission); each pick logs how many of each type are on the map,
+--       and each interact press the three nearest.
+-- 0.15: diagnostics only: each pick logs every lore object's position; each E press logs the Helldivers'
+--       positions and the three nearest objects' positions (a far vending machine read 1.0 m in 0.14).
+--       SEAF SET lines name the unit types set (turrets the game files with SEAF turned hostile in 0.14).
+-- 0.16: the Helldivers' gas mortar sentry (type 299c0d3dfd2f0994, filed by the game with SEAF's record 24) is never set
+--       or counted as a soldier.
+-- 0.17: voice call. When a batch of SEAF drops while rebel mode is on, mission control follows the game's own
+--       SEAF line with "Enemy reinforcements inbound" / "Hostiles incoming" / "Unidentified hostiles incoming"
+--       (six takes, random, no line twice running, at most every 45 s).
+-- 0.18: the map marker redone: a smooth thin ring and a faint fill (triangles) with one label, DISSIDENT DATA;
+--       the surface stays while the map is open and only the ring is redrawn on a move (no flicker).
+-- 0.19: the pick no longer gives the twist away: NEW INTEL DISCOVERED / LOCATION MARKED ON YOUR TACTICAL MAP,
+--       and the map label reads INTEL. DISSIDENT CELL DISCOVERED stays for the card itself.
+--       Positions now come from the game's unit table (the engine lookup found units attached to the Helldiver:
+--       the card sat on him and any E press fired it); lore objects are zone type 49.
+-- 0.20: diagnostics for the freeze on opening the map after the pick (every 0.19 mission, 2026-10-17):
+--       the first 25 marker draws log a line before and after each engine call, map open/close is logged,
+--       and a new setting picks what is drawn: marker = 1 ring and label, 2 ring only, 3 label only, 0 nothing.
+-- 0.21: the freeze fixed. The 0.20 trace caught the game hanging inside Gui.update_text when the label was moved
+--       to -1000, -1000 to hide it (the area slid off the map for a frame while the map animated open). Now no
+--       text is ever placed off screen: off the map, the whole surface is cleared (the close-map clean-up), and
+--       it is drawn fresh when the area comes back; the label is created at its real place. Trace kept.
+-- 0.22: 0.21 still froze, and its trace showed why: Gui.update_text hangs the game on any frame after the text
+--       was made, wherever it is moved to (same-frame calls worked; 0.18 escaped because its ring never moved).
+--       Gui.update_text and Gui.destroy_triangle are gone: any move throws the whole surface away and draws
+--       it fresh (ring and label), the way 0.14 drew. Trace kept. (In the game 2026-10-17 23:28: no freeze, no flicker.)
+-- 0.23: the voice call's engine world list read from helldivers2.exe+0x1A10308, a typo for HD2Runtime's 0x1A10208
+--       (27329032), so it always stopped at "the engine world list is unreadable" (first live chance 23:36).
+--       Checked live, read-only: 0x1A10208 lists 7 worlds with the Game World once, at index 1.
+--       Also: the log names 0x2 the Terminids and 0x8 the Automatons (was "bugs or bots").
+-- 0.24: one enemy unit on the map is enough to pick the rebel side (was three). On 2026-10-18 00:10 the card switched
+--       rebel mode on with 12 SEAF standing and one bug on the map, so it waited and the SEAF stayed friendly.
+-- 0.25: when the card's object leaves the game (destroyed or cleaned up), the replacement is the lore object nearest
+--       to where it was (was: random anywhere; on 2026-10-18 00:48 the ring jumped 500 m with no notice), and an
+--       INTEL MOVED banner says so.
+-- 0.26: the pick's banner reads NEW INTELLIGENCE DISCOVERED / FIND THE INTEL AND GET IT TO THE DESTROYER. (Wilson
+--       2026-10-18; was NEW INTEL DISCOVERED / FIND THE INTEL. AREA MARKED ON YOUR TACTICAL MAP.).
+-- 0.27: the card's banner line reads ENEMY SYMPATHIZERS HAVE TURNED HOSTILE. (Wilson 2026-10-18: the only place the
+--       banners said SEAF; was SEAF FORCES HAVE TURNED HOSTILE.).
+-- 0.28: co-op (Wilson 2026-10-18: "other players in the lobby need to be able to do the intel mission. see the map and
+--       such"). The card is the same on every machine in the mission: the lore objects sorted by where they stand,
+--       the pick and the search area's offset taken from a hash of their positions (logged as the fingerprint), so
+--       a squadmate's copy marks the same spot. Any Helldiver within reach of it finds it, by walking up or with E.
+--       In a game that is not the host it only shows (banners and the map marker); the host's game switches the SEAF.
+--       The pick no longer skips lore objects near a Helldiver (that differs per machine).
+-- 0.29: the card is taken with E only (Wilson 2026-10-19: walking past it should not fire it; everyone has the mod,
+--       each player selects it with E). The walk-up check (0.28's card_near) is gone. A squadmate's E shows only in
+--       their own game; the SEAF turn when the host presses E at the card (the copies do not talk to each other).
 -- Settings: Logs/ChaosDivers.cfg (key, side, guard, guard_at, squad, banner; read again at every key press)
 -- Log: Logs/ChaosDivers.log (in the CowboyBingus log folder); the last session's
 --      is kept as ChaosDivers.previous.log.
@@ -78,7 +139,7 @@
 --   mission state   -> one object; the game reads the kill count as
 --                      [game.dll slot] + 0x2FC84
 if rawget(_G, "ChaosDivers") then return true end
-local REVISION = "Chaos Divers: Dissident Discovery test 0.10"
+local REVISION = "Chaos Divers: Dissidents Among Us test 0.29"
 local state = { revision = REVISION, frames = 0, status = "starting" }
 rawset(_G, "ChaosDivers", state)
 
@@ -233,7 +294,7 @@ end
 
 -- ------------------------------------------------------------------ settings
 local CFG = DIR .. "ChaosDivers.cfg"
-local DEFAULTS = { key = 120, side = 0, guard = 1, guard_at = 1, squad = 0, banner = 1 }
+local DEFAULTS = { key = 120, side = 0, guard = 1, guard_at = 1, squad = 0, banner = 1, card = 1, interact = 69, marker = 1 }
 local BAD_KEYS = { [117] = "F6 is the Passive Picker's", [118] = "F7 is the Reroller's", [122] = "F11 is Steam's", [123] = "F12 is Steam's" }
 local function defaults() local t = {} for k, v in pairs(DEFAULTS) do t[k] = v end return t end
 local cfg = defaults()
@@ -251,9 +312,16 @@ local function parse_cfg(text)
 		elseif name == "side" and n then
 			if n == 0 or n == 2 or n == 4 or n == 8 then out.side = n
 			else notes[#notes + 1] = "side " .. value .. " refused (only 0, 2, 4 or 8); using 0 (join the enemy on the map)" end
-		elseif (name == "guard" or name == "squad" or name == "banner") and n then
+		elseif name == "interact" and n then
+			n = math.floor(n)
+			if n < 1 or n > 254 then notes[#notes + 1] = "interact " .. value .. " is not a key number; using E (69)"
+			else out.interact = n end
+		elseif (name == "guard" or name == "squad" or name == "banner" or name == "card") and n then
 			if n == 0 or n == 1 then out[name] = n
 			else notes[#notes + 1] = name .. " " .. value .. " refused (only 0 or 1); using " .. DEFAULTS[name] end
+		elseif name == "marker" and n then
+			if n == 0 or n == 1 or n == 2 or n == 3 then out.marker = n
+			else notes[#notes + 1] = "marker " .. value .. " refused (0 to 3); using 1" end
 		elseif name == "guard_at" and n then
 			n = math.floor(n)
 			if n >= 1 and n <= 8 then out.guard_at = n
@@ -275,7 +343,7 @@ local function load_cfg()
 					"key = 120\n",
 					"# side: the side the SEAF soldiers are put on while rebel mode is on.\n",
 					"#   0 = join whatever enemy holds the map (squids, bugs or bots), chosen each time the mode goes on.\n",
-					"#   4 = always the squids' side.   2 or 8 = always that side (the bugs' and bots' sides; which is which is not known yet).\n",
+					"#   4 = always the squids' side.   2 = always the bugs' side.   8 = always the bots' side.\n",
 					"side = 0\n",
 					"# guard: 1 = while rebel mode is on, the traitor tally and the SEAF kill count are kept at 0 so the destroyer never comes. 0 = off.\n",
 					"guard = 1\n",
@@ -284,7 +352,15 @@ local function load_cfg()
 					"# squad: 0 = solo only. 1 = also with other Helldivers in the mission (private lobby, friends who know).\n",
 					"squad = 0\n",
 					"# banner: 1 = show DISSIDENT CELL DISCOVERED on screen when rebel mode switches on. 0 = off.\n",
-					"banner = 1\n")
+					"banner = 1\n",
+					"# card: 1 = one lore object per mission (the ones that only show text) holds the dissidents' data.\n",
+					"#   Press the interact key next to it to take it; walking past does nothing. In the host's game that switches rebel mode on.\n",
+					"#   Squadmates with the mod see the same marker, and their own banner when they press it. The on/off key still works. 0 = off.\n",
+					"card = 1\n",
+					"# interact: Windows key number of the game's interact key. 69 = E.\n",
+					"interact = 69\n",
+					"# marker: what the card's search area shows on the tactical map. 1 = ring and label, 2 = ring only, 3 = label only, 0 = nothing.\n",
+					"marker = 1\n")
 				w:close()
 			end
 		end)
@@ -297,7 +373,7 @@ local function load_cfg()
 	local changed = false
 	for k in pairs(DEFAULTS) do if new[k] ~= cfg[k] then changed = true end end
 	if changed then
-		log(string.format("settings: key %d, side 0x%X, guard %d at %d, squad %d, banner %d", new.key, new.side, new.guard, new.guard_at, new.squad, new.banner))
+		log(string.format("settings: key %d, side 0x%X, guard %d at %d, squad %d, banner %d, card %d, interact %d, marker %d", new.key, new.side, new.guard, new.guard_at, new.squad, new.banner, new.card, new.interact, new.marker))
 	end
 	cfg = new
 end
@@ -426,6 +502,17 @@ local function near(a, n)
 	return a + n <= span_hi or readable(a, n)
 end
 
+-- Units the game files with record 24 that are not SEAF soldiers: never set, never counted.
+-- 299c0d3dfd2f0994: the Helldivers' gas mortar sentry (set by 0.14 on 2026-10-17; it shelled him once the SEAF
+-- were dead). The gatling sentry is not record 24. Other mortar sentries likely are; SEAF SET lines log types.
+local NOT_SEAF = { { 0xfd2f0994, 0x299c0d3d } }
+local function not_seaf(unit)
+	if not (unit and near(unit, 8)) then return false end
+	local lo, hi = u32(unit), u32(unit + 4)
+	for _, t in ipairs(NOT_SEAF) do if lo == t[1] and hi == t[2] then return true end end
+	return false
+end
+
 -- Returns a table: where ("none", "ship", "mission", "other"), divers and soldiers_list (lists of
 -- { side, copy, record, unit, id, at_side, at_copy }; soldiers_list holds the living SEAF soldiers),
 -- soldiers (how many), units; or nil and why.
@@ -453,7 +540,7 @@ local function read_units()
 			out.divers[#out.divers + 1] = { side = side, copy = u32(recs + 0x60 * i + 0xC), record = record,
 				unit = unit, id = u32(unit + 8), at_side = masks + 4 * i, at_copy = recs + 0x60 * i + 0xC }
 			records[record] = true
-		elseif record == REC_SEAF and side ~= 0 then
+		elseif record == REC_SEAF and side ~= 0 and not not_seaf(unit) then
 			out.soldiers = out.soldiers + 1
 			if unit and near(unit, 12) then
 				out.soldiers_list[#out.soldiers_list + 1] = { side = side, copy = u32(recs + 0x60 * i + 0xC), record = record,
@@ -563,8 +650,8 @@ local function would_arm(units, count)
 end
 
 -- ------------------------------------------------------------------ the rebel side
-local FRONT = { [2] = "0x2 (bugs or bots)", [4] = "0x4 (the Illuminate)", [8] = "0x8 (bugs or bots)" }
-local ENEMY_MIN = 3
+local FRONT = { [2] = "0x2 (the Terminids)", [4] = "0x4 (the Illuminate)", [8] = "0x8 (the Automatons)" }   -- 0x2 proven 10-14 and 10-17; 0x8 by elimination
+local ENEMY_MIN = 1   -- (was 3 to 0.23: a map with one bug left 12 SEAF friendly, 2026-10-18)
 -- The side the rebels join: the settings file's, or with side = 0 the enemy side with the most living units
 -- (at least ENEMY_MIN). Returns the side and how it was chosen, or nil while no enemy is on the map.
 local function pick_side(units)
@@ -583,7 +670,7 @@ end
 -- Control draw theirs. A surface keeps what was drawn on it, so it is only rebuilt when the fade steps.
 local engine = rawget(_G, "stingray")
 local BANNER_TITLE = "DISSIDENT CELL DISCOVERED"
-local BANNER_SUB = "SEAF FORCES HAVE TURNED HOSTILE."
+local BANNER_SUB = "ENEMY SYMPATHIZERS HAVE TURNED HOSTILE."
 local BANNER_SHOW, BANNER_FADE, BANNER_STEPS = 5.0, 1.0, 10
 local DEBUG_FONT = "core/performance_hud/debug"
 local banner = { dead = false }
@@ -618,20 +705,14 @@ local function banner_clear()
 	banner.gui, banner.world, banner.step = nil, nil, nil
 end
 
-local function banner_draw(alpha)
-	local App, World, Gui = engine.Application, engine.World, engine.Gui
-	local main, target = App.main_world(), nil
-	for _, w in ipairs(App.worlds() or {}) do if w ~= main then target = w break end end
-	banner_clear()
-	if not target then return end
-	local gui = World.create_screen_gui(target, "scale", 1, 1)
-	if not gui then error("screen surface unavailable", 0) end
-	banner.gui, banner.world = gui, target
-	local font, material
+-- The font and material to write text on a screen surface with: the game's own font when its handles are
+-- ready, else the engine's debug font. Returns font, material, "game" or "debug", and why not the game's.
+local function text_ink(gui)
+	local App, Gui = engine.Application, engine.Gui
 	local handles, why = game_font()
 	if handles then
 		local ids = engine.IdString64.from_hex
-		font, material = ids(handles.font), ids(handles.material)
+		local font, material = ids(handles.font), ids(handles.material)
 		local ink = Gui.material(gui, material)
 		if not ink then error("font material unavailable", 0) end
 		-- the font material's settings, as DiverKit and the Passive Picker set them for plain text
@@ -642,14 +723,27 @@ local function banner_draw(alpha)
 		engine.Material.set_vector2(ink, slot("e13777ce"), engine.Vector2(1, -1))
 		engine.Material.set_vector4(ink, slot("7701209e"), engine.Color(0, 0, 0, 0))
 		engine.Material.set_texture(ink, slot("88bac99b"), ids(handles.atlas))
-		if banner.font ~= "game" then banner.font = "game"; log("banner: drawn in the game's own font") end
-	else
-		if not (App.can_get("font", DEBUG_FONT) and App.can_get("material", DEBUG_FONT)) then
-			error("no font: " .. why .. ", and the engine's debug font is not loaded", 0)
-		end
-		font, material = DEBUG_FONT, DEBUG_FONT
-		if banner.font ~= "debug" then banner.font = "debug"; log("banner: the game's font is not available (" .. why .. "); drawn in the engine's debug font") end
+		return font, material, "game"
 	end
+	if not (App.can_get("font", DEBUG_FONT) and App.can_get("material", DEBUG_FONT)) then
+		error("no font: " .. why .. ", and the engine's debug font is not loaded", 0)
+	end
+	return DEBUG_FONT, DEBUG_FONT, "debug", why
+end
+
+local function banner_draw(alpha)
+	local App, World, Gui = engine.Application, engine.World, engine.Gui
+	local main, target = App.main_world(), nil
+	for _, w in ipairs(App.worlds() or {}) do if w ~= main then target = w break end end
+	banner_clear()
+	if not target then return end
+	local gui = World.create_screen_gui(target, "scale", 1, 1)
+	if not gui then error("screen surface unavailable", 0) end
+	banner.gui, banner.world = gui, target
+	local font, material, kind, why = text_ink(gui)
+	if kind == "game" then
+		if banner.font ~= "game" then banner.font = "game"; log("banner: drawn in the game's own font") end
+	elseif banner.font ~= "debug" then banner.font = "debug"; log("banner: the game's font is not available (" .. why .. "); drawn in the engine's debug font") end
 	local gw, gh = Gui.resolution()
 	if not (type(gw) == "number" and type(gh) == "number" and gw >= 480 and gh >= 320) then error("screen size unreadable", 0) end
 	local function color(r, g, b, a) return engine.Color(math.floor(a * alpha + 0.5), r, g, b) end
@@ -667,8 +761,9 @@ local function banner_draw(alpha)
 		Gui.rect(gui, engine.Vector3(x, top(t + h), z), engine.Vector2(w, h * u), color(rgb[1], rgb[2], rgb[3], a))
 	end
 	local title_size, sub_size = 47 * u, 20 * u
-	local tw, tl = measure(BANNER_TITLE, title_size)
-	local sw, sl = measure(BANNER_SUB, sub_size)
+	local title, sub = banner.title or BANNER_TITLE, banner.sub or BANNER_SUB
+	local tw, tl = measure(title, title_size)
+	local sw, sl = measure(sub, sub_size)
 	local mid = 314   -- the title's centre line
 	local tx = (gw - tw) / 2
 	-- the dark band behind the title and stripes, solid in the middle and fading out at both ends
@@ -689,20 +784,21 @@ local function banner_draw(alpha)
 			rect(tx + tw + gap, t, len, 1, ORANGE, 255, 961)
 		end
 	end
-	Gui.text(gui, BANNER_TITLE, font, title_size, material,
+	Gui.text(gui, title, font, title_size, material,
 		engine.Vector3(tx - tl, top(mid + 0.35 * 47), 963), color(ORANGE[1], ORANGE[2], ORANGE[3], 255))
 	-- the line under it: white capitals on their own dark box
 	local sub_mid, box_w = 369, sw + 20 * u
 	rect((gw - box_w) / 2, sub_mid - 15, box_w, 30, { 0, 0, 0 }, 160, 960)
-	Gui.text(gui, BANNER_SUB, font, sub_size, material,
+	Gui.text(gui, sub, font, sub_size, material,
 		engine.Vector3((gw - sw) / 2 - sl, top(sub_mid + 0.35 * 20), 963), color(WHITE[1], WHITE[2], WHITE[3], 255))
 end
 
-local function banner_show()
+local function banner_show(title, sub)
 	if banner.dead or cfg.banner ~= 1 then return end
 	if not engine then banner.dead = true; log("banner off: the game's engine table is not available") return end
 	banner.start, banner.step = os.clock(), nil
-	log("BANNER: " .. BANNER_TITLE)
+	banner.title, banner.sub = title, sub
+	log("BANNER: " .. (title or BANNER_TITLE))
 end
 
 -- Every frame: draw while it shows, step the fade, clear it when done.
@@ -728,6 +824,115 @@ end
 local rebel = { on = false, side = nil, set = 0, resets = 0, kept = 0, tally_resets = 0, tally_kept = 0 }
 local guard_ok = false   -- set by the unit pass: in a mission (or between Helldivers), solo unless squad = 1
 state.rebel = rebel
+
+-- ------------------------------------------------------------------ voice call (0.17)
+-- When SEAF reinforcements drop while rebel mode is on, mission control follows the game's own "SEAF inbound"
+-- line with one of six of its own lines (rotated at random, never the same line twice running): "Enemy
+-- reinforcements inbound, prepare for contact", "Hostiles incoming", "Unidentified hostiles incoming", two takes
+-- each. Event ids from the game's sound bank (archive 7c221cf5b12213ac, read with RaidingForPants's
+-- hd2-audio-modder); Wwise posts the FNV-1 hash of the name it is given, so each name below hashes to its
+-- event's id. Posted the way SkyeShade's HD2Runtime posts its UI sounds: on the Game World's WwiseWorld, the
+-- world matched by pointer in the engine's world list (a wrong world crashes the game natively; pcall cannot
+-- catch it), and only after Wwise.has_event says the sound engine knows the event.
+local VOICE_LINES = {
+	{ line = "reinforcements", name = "bhhbahfd", id = 148239244 }, { line = "reinforcements", name = "bhhbahfg", id = 148239247 },
+	{ line = "hostiles", name = "tfrmagno", id = 97901441 }, { line = "hostiles", name = "tfrmagnl", id = 97901442 },
+	{ line = "unidentified", name = "mgqhanez", id = 4091941746 }, { line = "unidentified", name = "mgqhaney", id = 4091941745 },
+}
+local VOICE_TEXT = { reinforcements = "Enemy reinforcements inbound, prepare for contact", hostiles = "Hostiles incoming",
+	unidentified = "Unidentified hostiles incoming" }
+local VOICE_STAMP = 1790161983   -- game.dll build 25480438; any other build keeps the voice call silent
+local GAME_CONTEXT_RVA, CTX_GAME_WORLD, CTX_WWISE_WORLD = 0x3326340, 0x10E8, 0x10F8   -- game.dll
+local EXE_APPLICATION, APP_WORLD_COUNT, APP_WORLD_ARRAY = 0x1A10208, 1424, 1432          -- helldivers2.exe (HD2Runtime application = 27329032)
+local VOICE_DELAY, VOICE_GAP, VOICE_SETTLE, VOICE_BATCH = 300, 2700, 600, 2   -- frames: after the drop, between calls, after switch-on; soldiers
+local voice = { dead = false, pending = nil, last_frame = -1000000, last_line = nil }
+state.voice = voice
+
+local function voice_off(why)
+	if not voice.dead then voice.dead = true; log("voice call off for this game session: " .. why) end
+end
+
+local function fnv1(name)
+	local h = 0x811C9DC5
+	for i = 1, #name do
+		local c = name:byte(i)
+		if c >= 65 and c <= 90 then c = c + 32 end
+		h = (h * 0x193 + (h % 256) * 16777216) % 4294967296
+		h = bit.bxor(h, c) % 4294967296
+		if h < 0 then h = h + 4294967296 end
+	end
+	return h
+end
+
+-- The engine's World value of the game's own Game World, or nil and why.
+local function game_world()
+	if state.pe_timestamp ~= VOICE_STAMP then return nil, "game.dll is not build 25480438" end
+	local slot = base + GAME_CONTEXT_RVA
+	if not readable(slot, 8) then return nil, "game context slot unreadable" end
+	local ctx = ptr(slot)
+	if not (ctx and readable(ctx + CTX_GAME_WORLD, 24)) then return nil, "no game context" end
+	local gw, ww = ptr(ctx + CTX_GAME_WORLD), ptr(ctx + CTX_WWISE_WORLD)
+	if not (gw and ww) then return nil, "the game has no Game World with a WwiseWorld" end
+	local exe = kernel.GetModuleHandleA(nil)
+	if exe == nil then return nil, "helldivers2.exe not found" end
+	exe = tonumber(ffi.cast("uintptr_t", exe))
+	if not readable(exe + EXE_APPLICATION, 8) then return nil, "application slot unreadable" end
+	local app = ptr(exe + EXE_APPLICATION)
+	if not (app and readable(app + APP_WORLD_COUNT, 16)) then return nil, "no application" end
+	local count, array = u32(app + APP_WORLD_COUNT), ptr(app + APP_WORLD_ARRAY)
+	if not (array and count > 0 and count <= 64 and readable(array, 8 * count)) then return nil, "the engine world list is unreadable" end
+	local index
+	for k = 0, count - 1 do
+		if ptr(array + 8 * k) == gw then
+			if index then return nil, "the Game World is listed twice" end
+			index = k + 1
+		end
+	end
+	if not index then return nil, "the Game World is not in the engine world list" end
+	local list = engine.Application.worlds()
+	if type(list) ~= "table" or #list ~= count then return nil, "Application.worlds does not match the engine list" end
+	if list[index] == nil then return nil, "no world value at index " .. index end
+	return list[index]
+end
+
+local function voice_play()
+	local S = engine
+	local Wwise, WwiseWorld = S and S.Wwise, S and S.WwiseWorld
+	if not (type(Wwise) == "table" and type(WwiseWorld) == "table" and type(Wwise.wwise_world) == "function"
+		and type(Wwise.has_event) == "function" and type(WwiseWorld.trigger_event) == "function") then
+		voice_off("the engine's Wwise functions are not available") return
+	end
+	local pool = {}
+	for _, v in ipairs(VOICE_LINES) do if v.line ~= voice.last_line then pool[#pool + 1] = v end end
+	local pick = pool[math.random(#pool)]
+	if fnv1(pick.name) ~= pick.id then voice_off("the name " .. pick.name .. " does not hash to its event id") return end
+	local w, why = game_world()
+	if not w then log("voice call skipped: " .. why) return end
+	local has = Wwise.has_event(pick.name)
+	if has ~= true then log("voice call skipped: the sound engine does not know event " .. pick.id .. " here") return end
+	local playing = WwiseWorld.trigger_event(Wwise.wwise_world(w), pick.name)
+	if type(playing) ~= "number" or playing == 0 then log("voice call: the sound engine did not post event " .. pick.id) return end
+	voice.last_line, voice.last_frame = pick.line, state.frames
+	log(string.format("VOICE CALL: \"%s\" (event %d, playing id %s)", VOICE_TEXT[pick.line], pick.id, tostring(playing)))
+end
+
+-- A batch of SEAF soldiers was just set while rebel mode is on.
+local function voice_cue(n)
+	if voice.dead or not engine or n < VOICE_BATCH or voice.pending then return end
+	if not rebel.on_frame or state.frames - rebel.on_frame < VOICE_SETTLE then return end
+	if state.frames - voice.last_frame < VOICE_GAP then return end
+	voice.pending = state.frames + VOICE_DELAY
+end
+
+local function voice_tick()
+	if voice.dead or not voice.pending then return end
+	if not rebel.on then voice.pending = nil return end
+	if state.frames < voice.pending then return end
+	voice.pending = nil
+	local ok, err = pcall(voice_play)
+	if not ok then voice_off("stopped on error: " .. tostring(err)) end
+end
+
 
 local function forget()
 	if rebel.set > 0 then log(string.format("rebel mode set %d SEAF soldiers while it was on", rebel.set)) end
@@ -768,7 +973,7 @@ local function set_soldiers(units)
 	end
 	local t, why = detector_table()
 	if not t then say_once("table", "rebel mode is on but the detector table cannot be read (" .. why .. "); soldiers are left alone until it can") return end
-	local side, n = rebel.side, 0
+	local side, n, types = rebel.side, 0, {}
 	for _, s in ipairs(units.soldiers_list) do
 		local function fits(v) return v == SIDE_HOME or v == side end
 		if fits(s.side) and fits(s.copy) then
@@ -777,13 +982,21 @@ local function set_soldiers(units)
 			elseif fits(u32(at)) then
 				local wrote, err = move(s, at, SIDE_HOME, side)
 				if not wrote then say_once("write", "could not set a soldier, nothing changed on him: " .. err)
-				elseif wrote > 0 then n = n + 1 end
+				elseif wrote > 0 then
+					n = n + 1
+					local t = readable(s.unit, 8) and id_hex(s.unit) or "?"
+					types[t] = (types[t] or 0) + 1
+				end
 			end
 		end
 	end
 	if n > 0 then
 		rebel.set = rebel.set + n
-		log(string.format("SEAF SET: %d soldier%s now on side 0x%X (%d so far)", n, n == 1 and "" or "s", side, rebel.set))
+		voice_cue(n)
+		local tl = {}
+		for t, k in pairs(types) do tl[#tl + 1] = t .. (k > 1 and (" x" .. k) or "") end
+		table.sort(tl)
+		log(string.format("SEAF SET: %d soldier%s now on side 0x%X (%d so far); types %s", n, n == 1 and "" or "s", side, rebel.set, table.concat(tl, ", ")))
 	end
 end
 
@@ -810,7 +1023,7 @@ local function switch_on(units, count)
 	if not ok then log("key ignored, rebel mode stays off: " .. no) return end
 	local t, why = detector_table()
 	if not t then log("key ignored, rebel mode stays off: " .. why) return end
-	rebel.on, rebel.side = true, nil
+	rebel.on, rebel.side, rebel.on_frame = true, nil, state.frames
 	log(string.format("REBEL MODE ON: SEAF soldiers are set to %s as they appear; Helldivers, dogs and sentries are not touched. Same key switches it off.%s",
 		cfg.side == 0 and "the side of the enemy on the map" or string.format("side 0x%X", cfg.side), cfg.guard == 1 and " Guard on (traitor tally and kill count)." or " No guard: six friendly kills without a ten-second gap bring the destroyer."))
 	banner_show()
@@ -841,11 +1054,422 @@ if type(previous_update) ~= "function" then
 	return true
 end
 
-state.test = { parse_cfg = parse_cfg }   -- for the offline test harness only
+state.test = { parse_cfg = parse_cfg, set_cfg = function (k, v) cfg[k] = v end }   -- for the offline test harness only
+
+-- ------------------------------------------------------------------ key card (0.13)
+-- One lore object per mission is the dissidents' data. The interact key pressed with a Helldiver within CARD_RANGE
+-- of it finds it; in the host's game that switches rebel mode on, as the on/off key does. The candidates come from the game's interactable
+-- manager (layout from CarrotLouis's Ban Supply FRV Reloaded, build 25480438): each record names the
+-- object's resource and its unit (+12), each state block its interaction zone types. Positions come from the
+-- game's unit table (see unit_pos), read from memory: no engine calls on units (0.12 crashed the game that way).
+local CARD_STAMP = 1790161983        -- game.dll build 25480438; any other build switches the card off
+local INTERACTABLE_RVA = 0x3326D68   -- interactable manager slot
+local IT_HEADER, IT_STATE, IT_ZONES, IT_ZONE_TYPE = 0x14038, 0x370, 0x340, 0x44
+local LORE_TYPES = { [49] = true }   -- zone type of the read-only lore objects: Wilson stood at a note and the nearest world
+                                     -- object was type 49 (2026-10-17 08:40). 0.14 to 0.18 used 12, which is attached to the Helldiver.
+local DIVER_RES = "4d1c334d294dfa97" -- the Helldiver
+local CARD_RANGE = 2.5               -- metres
+local CARD_WAIT, CARD_RETRY = 1800, 1800   -- frames after landing before the first look; between looks
+-- The pick's banner: it says where to look, not what is there (Wilson 2026-10-17: "it gives away too much. I want the
+-- presentation to start with new Intel discovered"); the reveal waits for the card.
+local PICK_TITLE, PICK_SUB = "NEW INTELLIGENCE DISCOVERED", "FIND THE INTEL AND GET IT TO THE DESTROYER."
+local MOVED_TITLE, MOVED_SUB = "INTEL MOVED", "THE NEW LOCATION IS MARKED ON YOUR TACTICAL MAP."
+local AREA_RADIUS, AREA_OFF_MIN, AREA_OFF_MAX = 40, 5, 25   -- metres: the map marker's search area around a spot this far off the card
+local card = { off = nil, mission = false, since = 0, next_look = 0, chosen = nil, found = false, lore = nil }
+state.card = card
+math.randomseed(os.time())
+
+local function card_off(why)
+	if not card.off then card.off = why; log("key card off: " .. why) end
+end
+
+-- Every interactable: { res = 16 hex digits, zone = first zone type }; or nil and why.
+local function read_interactables()
+	if state.pe_timestamp ~= CARD_STAMP then return nil, "game.dll stamp " .. tostring(state.pe_timestamp) .. " is not build 25480438" end
+	local slot = base + INTERACTABLE_RVA
+	if not readable(slot, 8) then return nil, "interactable slot unreadable" end
+	local mgr = ptr(slot)
+	if not mgr or not readable(mgr + IT_HEADER, 72) then return nil, "no interactable manager" end
+	local h = mgr + IT_HEADER
+	local cap, active = u32(h), u32(h + 8)
+	if cap > 16384 or active > cap then return nil, string.format("interactable counts look wrong (%d of %d)", active, cap) end
+	local recs, states = ptr(h + 48), ptr(h + 56)
+	if active == 0 then return {} end
+	if not (recs and states and readable(recs, 8 * active) and readable(states, IT_STATE * active)) then return nil, "interactable arrays unreadable" end
+	local out = {}
+	for i = 0, active - 1 do
+		local rec = ptr(recs + 8 * i)
+		if rec and readable(rec, 8) then
+			local st = states + IT_STATE * i
+			local zones = u32(st + IT_ZONES)
+			out[#out + 1] = { res = id_hex(rec), unit = readable(rec + 12, 4) and u32(rec + 12) or nil,
+				zone = zones > 0 and zones <= 16 and u32(st + IT_ZONE_TYPE) or nil }
+		end
+	end
+	return out
+end
+
+local function f32(a) return tonumber(ffi.cast("const float *", a)[0]) end
+local function finite(x) return type(x) == "number" and x == x and x > -1e9 and x < 1e9 end
+
+-- A unit's world position from helldivers2.exe's unit table (Th3chef's Treasure Map reads supply positions this way):
+-- [exe+0x1A100F0] -> objects +0x88, count +0x98; the object at index (unit & 0x3FFFFF) holds the unit's own id at +8
+-- (a stale id means the unit is gone) and its world poses at +0x88, the root's x, y, z at +48/+52/+56.
+-- 0.13 to 0.18 asked the engine (World.units_by_resource) instead; for the lore type it found the interaction units
+-- attached to the Helldiver, so the card sat on him and any E press fired it.
+local EXE_UNITS, UNIT_OBJECTS, UNIT_COUNT, UNIT_POSES, POSE_ROOT = 0x1A100F0, 0x88, 0x98, 0x88, 48
+local function unit_table()
+	local exe = kernel.GetModuleHandleA(nil)
+	if exe == nil then return nil end
+	exe = tonumber(ffi.cast("uintptr_t", exe))
+	if not readable(exe + EXE_UNITS, 8) then return nil end
+	local reg = ptr(exe + EXE_UNITS)
+	if not (reg and readable(reg + UNIT_OBJECTS, 0x14)) then return nil end
+	local objs, n = ptr(reg + UNIT_OBJECTS), u32(reg + UNIT_COUNT)
+	if not objs or n == 0 or n > 0x400000 then return nil end
+	return { objs = objs, n = n }
+end
+local function unit_pos(t, unit)
+	if not (t and unit) then return nil end
+	local i = bit.band(unit, 0x3FFFFF)
+	if i >= t.n or not readable(t.objs + 8 * i, 8) then return nil end
+	local obj = ptr(t.objs + 8 * i)
+	if not (obj and readable(obj + 8, UNIT_POSES)) or u32(obj + 8) ~= unit then return nil end
+	local poses = ptr(obj + UNIT_POSES)
+	if not (poses and readable(poses + POSE_ROOT, 12)) then return nil end
+	local x, y, z = f32(poses + POSE_ROOT), f32(poses + POSE_ROOT + 4), f32(poses + POSE_ROOT + 8)
+	if not (finite(x) and finite(y) and finite(z)) or math.abs(x) > 1e5 or math.abs(y) > 1e5 then return nil end
+	return { x = x, y = y, z = z }
+end
+local function position(unit) return unit_pos(unit_table(), unit) end
+
+local function dist(a, b)
+	local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
+	return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- The lore object nearest to a spot (the lost card's), for the replacement.
+local function nearest_lore(lore, pos)
+	local best, bd
+	for _, it in ipairs(lore) do local d = dist(pos, it.pos) if not bd or d < bd then best, bd = it, d end end
+	return best, bd
+end
+state.test.nearest_lore = nearest_lore
+
+-- Every interactable with a position, { res, zone, unit, pos }, and the Helldivers' positions (their own records).
+local function inventory()
+	local items, why = read_interactables()
+	if not items then return nil, why end
+	local t = unit_table()
+	if not t then return nil, "the unit table is unreadable" end
+	local out, divers = {}, {}
+	for _, it in ipairs(items) do
+		local p = unit_pos(t, it.unit)
+		if p then
+			if it.res == DIVER_RES then divers[#divers + 1] = p
+			else out[#out + 1] = { res = it.res, zone = it.zone, unit = it.unit, pos = p } end
+		end
+	end
+	return out, nil, divers
+end
+
+local function where(p) return string.format("%.1f %.1f %.1f", p.x, p.y, p.z) end
+
+-- The same card on every machine in the mission (0.28): the lore objects sorted by where they stand (to the
+-- metre), and the pick and the search area's offset taken from a hash of all their positions. Two games that
+-- see the same objects pick the same card; the fingerprint in the log shows whether they did. Sorts lore.
+local function card_pick(lore)
+	local function key(it) return { math.floor(it.pos.x + 0.5), math.floor(it.pos.y + 0.5), math.floor(it.pos.z + 0.5) } end
+	for _, it in ipairs(lore) do it.key = key(it) end
+	table.sort(lore, function (a, b)
+		for i = 1, 3 do if a.key[i] ~= b.key[i] then return a.key[i] < b.key[i] end end
+		return a.res < b.res
+	end)
+	local parts = {}
+	for i, it in ipairs(lore) do parts[i] = it.key[1] .. "," .. it.key[2] .. "," .. it.key[3] end
+	local text = table.concat(parts, ";")
+	local seed, spin = fnv1(text), fnv1(text .. ";area")
+	local a = (spin % 3600) / 3600 * 2 * math.pi
+	local off = AREA_OFF_MIN + (math.floor(spin / 3600) % 1000) / 1000 * (AREA_OFF_MAX - AREA_OFF_MIN)
+	return lore[seed % #lore + 1], a, off, seed
+end
+state.test.card_pick = card_pick
+
+local function card_look()
+	local all, why, divers = inventory()
+	if not all then card_off(why) return end
+	local lore, census = {}, {}
+	for _, it in ipairs(all) do
+		if it.zone and LORE_TYPES[it.zone] then lore[#lore + 1] = it end
+		local z = tostring(it.zone)
+		census[z] = (census[z] or 0) + 1
+	end
+	card.lore = lore
+	local pick, a, off, seed
+	if #lore > 0 then pick, a, off, seed = card_pick(lore) end
+	for i, it in ipairs(lore) do log(string.format("key card: lore object %d of %d: %s at %s", i, #lore, it.res, where(it.pos))) end
+	local parts = {}
+	for z, n in pairs(census) do parts[#parts + 1] = { z = z, n = n } end
+	table.sort(parts, function (a, b) return (tonumber(a.z) or 999) < (tonumber(b.z) or 999) end)
+	for i, p in ipairs(parts) do parts[i] = p.z .. ":" .. p.n end
+	log("key card: interactables by zone type " .. table.concat(parts, " "))
+	if #lore == 0 then
+		log(string.format("key card: %d interactables on the map, no lore object (zone type 49) yet; will look again", #all))
+		return
+	end
+	local lost = card.lost_at
+	card.lost_at = nil
+	local moved
+	if lost then card.chosen, moved = nearest_lore(lore, lost) else card.chosen = pick end
+	log(string.format("key card: fingerprint %08x over %d lore objects (the same in every game that sees the same map)", seed, #lore))
+	card.area = { x = card.chosen.pos.x + off * math.cos(a), y = card.chosen.pos.y + off * math.sin(a) }
+	log(string.format("map marker: search area %.0f m around %.1f %.1f (the card is %.0f m from its centre)", AREA_RADIUS, card.area.x, card.area.y, off))
+	if moved then
+		log(string.format("key card: the replacement is the lore object nearest the lost one, %.0f m from where it was", moved))
+		banner_show(MOVED_TITLE, MOVED_SUB)
+	elseif not card.notified then
+		card.notified = true
+		banner_show(PICK_TITLE, PICK_SUB)
+	end
+	local d = divers and divers[1] and dist(divers[1], card.chosen.pos)
+	log(string.format("KEY CARD: %d lore objects among %d interactables; the card is %s at %s%s",
+		#lore, #all, card.chosen.res, where(card.chosen.pos), d and string.format(", %.0f m from you", d) or ""))
+end
+
+-- Called with the unit pass: tracks the mission and picks the card.
+local function card_tick(units)
+	if card.off or cfg.card ~= 1 or not engine then return end
+	if not units or units.where ~= "mission" then
+		if card.mission then card.mission, card.chosen, card.found, card.lore, card.area, card.notified, card.lost_at = false, nil, false, nil, nil, nil, nil end
+		return
+	end
+	if not card.mission then
+		card.mission, card.since = true, state.frames
+		card.next_look = state.frames + CARD_WAIT
+	end
+	if card.found or state.frames < card.next_look then return end
+	if card.chosen and not position(card.chosen.unit) then
+		log("key card: the chosen lore object is gone; picking the one nearest to where it was")
+		card.lost_at = card.chosen.pos
+		card.chosen = nil
+	end
+	if not card.chosen then
+		card.next_look = state.frames + CARD_RETRY
+		card_look()
+	end
+end
+
+-- The interact key was pressed: log the nearest interactable; true when it is the card, within reach.
+local function card_interact(units)
+	if card.off or cfg.card ~= 1 or not engine or card.found then return false end
+	if not units or units.where ~= "mission" then return false end
+	local all, _, divers = inventory()
+	all, divers = all or {}, divers or {}
+	if #divers == 0 then return false end
+	-- the three nearest within 6 m
+	local near = {}
+	for _, it in ipairs(all) do
+		local bd
+		for _, p in ipairs(divers) do local d = dist(p, it.pos) if not bd or d < bd then bd = d end end
+		if bd and bd <= 6 then near[#near + 1] = { it = it, d = bd } end
+	end
+	table.sort(near, function (a, b) return a.d < b.d end)
+	local dv = {}
+	for i, p in ipairs(divers) do dv[i] = where(p) end
+	log(string.format("interact: E pressed; Helldivers at %s; %d interactables within 6 m", table.concat(dv, " / "), #near))
+	for i = 1, math.min(3, #near) do
+		local it, d = near[i].it, near[i].d
+		log(string.format("interact: %s interactable %s, zone type %s, %.1f m, at %s%s", i == 1 and "nearest" or ("number " .. i), it.res, tostring(it.zone), d, where(it.pos),
+			card.chosen and it.res == card.chosen.res and " (a card-type object)" or ""))
+	end
+	if not card.chosen then return false end
+	local cp = position(card.chosen.unit)
+	if not cp then return false end
+	for _, p in ipairs(divers) do
+		if dist(p, cp) <= CARD_RANGE then card.found = true return true end
+	end
+	return false
+end
+
+-- ------------------------------------------------------------------ map marker (0.14)
+-- While the tactical map is open, the card's search area is drawn on it: a thin orange ring with a faint fill
+-- around a spot 5 to 25 m off the card (so it still takes a search), labelled DISSIDENT DATA. The map's place
+-- and scale come from the game's HUD manager, as Th3chef's Treasure Map reads them (build 25480438): HUD slot
+-- game.dll+0x346D538; tactical map at +0x3EF168 in it: open flag +405 (byte), centre x/y +288/+292, pan x/y
+-- +304/+308, zoom +328; its frame at +10464: size +36/+40, scale +100, screen x/y +148/+156. A world point
+-- lands at the frame's middle plus (point - (centre - pan)) * zoom * scale. Read only; drawn on our own
+-- screen surface in the overlay world, above the game's map layers.
+local MARKER_LABEL = "INTEL"   -- (Wilson 2026-10-17: "it gives away too much"; was DISSIDENT DATA)
+local MAP_HUD_RVA, MAP_VIEW, MAP_OPEN, MAP_V, MAP_FRAME = 0x346D538, 0x3EF168, 405, 288, 10464
+local MARKER_LAYER = 950
+local marker = { dead = false, gui = nil, world = nil, key = nil }
+state.marker = marker
+
+
+-- The open map's view, false while the map is closed, nil when there is no HUD (no mission) or it reads wrong.
+local function map_view()
+	local slot = base + MAP_HUD_RVA
+	if not readable(slot, 8) then return nil end
+	local hud = ptr(slot)
+	if not hud then return nil end
+	local v = hud + MAP_VIEW
+	if not readable(v + MAP_OPEN, 1) then return nil end
+	if ffi.cast("const uint8_t *", v + MAP_OPEN)[0] ~= 1 then return false end
+	if not (readable(v + MAP_V, 44) and readable(v + MAP_FRAME + 36, 124)) then return nil end
+	local f = v + MAP_FRAME
+	local out = { cx = f32(v + MAP_V), cy = f32(v + MAP_V + 4), px = f32(v + MAP_V + 16), py = f32(v + MAP_V + 20),
+		zoom = f32(v + MAP_V + 40), w = f32(f + 36), h = f32(f + 40), scale = f32(f + 100), x = f32(f + 148), y = f32(f + 156) }
+	for _, k in ipairs({ "cx", "cy", "px", "py", "zoom", "w", "h", "scale", "x", "y" }) do if not finite(out[k]) then return nil end end
+	if out.zoom <= 0 or out.scale <= 0 or out.w <= 0 or out.h <= 0 then return nil end
+	return out
+end
+
+-- Where the area lands on screen: centre x, y and ring radius in screen units, and whether it is on the map.
+local function area_on_screen(v, area)
+	local s = v.scale
+	local mx, my = v.x + v.w * s * 0.5, v.y + v.h * s * 0.5
+	local k = v.zoom * s
+	local x, y = mx + (area.x - (v.cx - v.px)) * k, my + (area.y - (v.cy - v.py)) * k
+	local r = math.max(AREA_RADIUS * k, 14)
+	local reach = math.min(v.w, v.h) * s * 0.5
+	local dx, dy = x - mx, y - my
+	return x, y, r, math.sqrt(dx * dx + dy * dy) <= reach + r
+end
+
+-- 0.20 trace: the first MARKER_TRACE draws (and every clear while tracing) log a line before and after each
+-- engine call, so a freeze shows as a "before" line with no "after".
+local MARKER_TRACE = 25
+local function mtrace(text) if marker.trace then log("map trace " .. (marker.draws or 0) .. ": " .. text) end end
+
+local function marker_clear()
+	if marker.gui and marker.world and engine then
+		mtrace("clear: Application.worlds")
+		for _, w in ipairs(engine.Application.worlds() or {}) do
+			if w == marker.world then
+				mtrace("clear: World.destroy_gui")
+				engine.World.destroy_gui(marker.world, marker.gui)
+				mtrace("clear: World.destroy_gui done")
+				break
+			end
+		end
+	end
+	marker.gui, marker.world, marker.key = nil, nil, nil
+end
+
+-- Every draw builds a new surface: any old one is thrown away first (World.destroy_gui, the close-map clean-up).
+-- No Gui.update_text or Gui.destroy_triangle: update_text on a text made in an earlier frame hung the game (0.21).
+-- Triangles take Vector3(x, 0, y) and a layer, as Treasure Map draws them.
+local RING_SEGMENTS, RING_WIDTH, FILL_SEGMENTS = 72, 2, 48
+local function marker_draw(v, area)
+	local App, World, Gui = engine.Application, engine.World, engine.Gui
+	if type(Gui.triangle) ~= "function" then error("this game version lacks Gui.triangle", 0) end
+	local ring, label = cfg.marker ~= 3, cfg.marker ~= 2
+	local x, y, r, shown = area_on_screen(v, area)
+	if marker.gui then
+		mtrace(string.format("moved (area now at %.1f %.1f): throwing the old surface away", x, y))
+		marker_clear()
+		mtrace("old surface gone")
+	end
+	if not shown then return end
+	marker.draws = (marker.draws or 0) + 1
+	marker.trace = marker.draws <= MARKER_TRACE
+	mtrace(string.format("start (marker %d); area at %.1f %.1f, ring %.1f; map frame %.0f x %.0f at %.0f %.0f, scale %.3f, zoom %.3f",
+		cfg.marker, x, y, r, v.w, v.h, v.x, v.y, v.scale, v.zoom))
+	mtrace("Application.main_world / worlds")
+	local main, target = App.main_world(), nil
+	for _, w in ipairs(App.worlds() or {}) do if w ~= main then target = w break end end
+	mtrace(target and "overlay world found" or "no overlay world; nothing drawn")
+	if not target then return end
+	mtrace("World.create_screen_gui")
+	local gui = World.create_screen_gui(target, "scale", 1, 1)
+	mtrace("World.create_screen_gui done")
+	if not gui then error("screen surface unavailable", 0) end
+	marker.gui, marker.world = gui, target
+	if ring then
+		local V3 = engine.Vector3
+		local function tri(ax, ay, bx, by, cx, cy, layer, color)
+			Gui.triangle(gui, V3(ax, 0, ay), V3(bx, 0, by), V3(cx, 0, cy), layer, color)
+		end
+		-- a faint fill: the area, not a target
+		mtrace("Gui.triangle x" .. FILL_SEGMENTS .. " (fill)")
+		local FILL = engine.Color(48, 255, 140, 40)
+		for i = 0, FILL_SEGMENTS - 1 do
+			local a0, a1 = i * 2 * math.pi / FILL_SEGMENTS, (i + 1) * 2 * math.pi / FILL_SEGMENTS
+			tri(x, y, x + r * math.cos(a0), y + r * math.sin(a0), x + r * math.cos(a1), y + r * math.sin(a1), MARKER_LAYER, FILL)
+		end
+		-- a smooth, thin ring
+		mtrace("Gui.triangle x" .. RING_SEGMENTS * 2 .. " (ring)")
+		local RING = engine.Color(235, 255, 140, 40)
+		local ri, ro = r - RING_WIDTH / 2, r + RING_WIDTH / 2
+		for i = 0, RING_SEGMENTS - 1 do
+			local a0, a1 = i * 2 * math.pi / RING_SEGMENTS, (i + 1) * 2 * math.pi / RING_SEGMENTS
+			local c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
+			tri(x + ri * c0, y + ri * s0, x + ro * c0, y + ro * s0, x + ro * c1, y + ro * s1, MARKER_LAYER + 1, RING)
+			tri(x + ri * c0, y + ri * s0, x + ro * c1, y + ro * s1, x + ri * c1, y + ri * s1, MARKER_LAYER + 1, RING)
+		end
+		mtrace("Gui.triangle done")
+	end
+	if label then
+		mtrace("font and material")
+		marker.font, marker.material = text_ink(gui)   -- the ink is set on each new surface's own material
+		if not marker.text_w then
+			mtrace("Gui.resolution")
+			local _, gh = Gui.resolution()
+			marker.size = 15 * ((type(gh) == "number" and gh >= 320) and gh / 1080 or 1)
+			mtrace("Gui.text_extents")
+			local lo, hi = Gui.text_extents(gui, MARKER_LABEL, marker.font, marker.size)
+			marker.text_w = (lo and hi) and (engine.Vector2.x(hi) - engine.Vector2.x(lo)) or 14 * marker.size * 0.6
+		end
+		local lx, ly = x - marker.text_w / 2, y + r + 5
+		mtrace(string.format("Gui.text x2 (shadow, label) at %.0f %.0f", lx, ly))
+		Gui.text(gui, MARKER_LABEL, marker.font, marker.size, marker.material, engine.Vector3(lx + 1, ly - 1, MARKER_LAYER + 2), engine.Color(200, 0, 0, 0))
+		Gui.text(gui, MARKER_LABEL, marker.font, marker.size, marker.material, engine.Vector3(lx, ly, MARKER_LAYER + 2), engine.Color(255, 255, 140, 40))
+		mtrace("Gui.text done")
+	end
+	mtrace("done")
+end
+
+-- Every frame: one byte read while the map is closed; redrawn only when the area moves half a pixel or more.
+local function marker_tick()
+	if marker.dead then return end
+	local area = card.area
+	if card.off or cfg.card ~= 1 or not engine or not card.chosen or card.found or not area then
+		if marker.gui then marker_clear() end
+		return
+	end
+	local v = map_view()
+	local open = v and true or false
+	if open ~= (marker.open or false) then
+		marker.open = open
+		log(open and "map opened" or ("map closed" .. (v == nil and " (or unreadable)" or "")))
+		marker.beat_at = os.clock() + 1
+	end
+	-- while the map is open, a line a second (the first 60): a freeze after a finished draw shows as these stopping
+	if open and (marker.beats or 0) < 60 and os.clock() >= (marker.beat_at or 0) then
+		marker.beats = (marker.beats or 0) + 1
+		marker.beat_at = os.clock() + 1
+		log("map open, still running (" .. (marker.draws or 0) .. " draws so far)")
+	end
+	if not v or cfg.marker == 0 then
+		if marker.gui then marker_clear() end
+		return
+	end
+	local x, y, r = area_on_screen(v, area)
+	local key = marker.key
+	if marker.gui and key and math.abs(key[1] - x) < 0.5 and math.abs(key[2] - y) < 0.5 and math.abs(key[3] - r) < 0.5 then return end
+	marker_draw(v, area)
+	marker.key = { x, y, r }
+	if marker.gui and not marker.said then marker.said = true; log(string.format("map marker: drawn on the tactical map (search area at %.0f %.0f on screen, ring %.0f)", x, y, r)) end
+	if marker.draws == MARKER_TRACE then log("map trace: " .. MARKER_TRACE .. " draws traced, tracing stops here") end
+end
+
 local phase, wait = "start", 240
 local last_units, last_count, last_seen = nil, nil, 0
 local function watch()
 	banner_tick()
+	voice_tick()
+	local okm, errm = pcall(marker_tick)
+	if not okm then marker.dead = true; pcall(marker_clear); log("map marker off for this game session: " .. tostring(errm)) end
 	local count, before, count_at = read_count()
 	local ctext = count and string.format("kill count %d (value before it %d)", count, before) or ("kill count: " .. before)
 	if ctext ~= last_count then last_count = ctext; log(ctext) end
@@ -885,9 +1509,25 @@ local function watch()
 		end
 	end
 	local key = key_pressed(state.frames, cfg.key)
-	if not (key or state.frames % (rebel.on and 5 or 15) == 0) then return end
+	local interact = cfg.card == 1 and not card.off and not rebel.on and pressed(cfg.interact)
+	if not (key or interact or state.frames % (rebel.on and 5 or 15) == 0) then return end
 	local units, why = read_units()
-	if key then
+	local found = false
+	if interact and not key then
+		local okf, res = pcall(card_interact, units)
+		if okf then found = res else card_off("stopped on error: " .. tostring(res)) end
+	end
+	if found then
+		load_cfg()
+		if is_host() == false then
+			log("KEY CARD FOUND: the dissidents' data is read; this game is not the host, so it only shows it (the host's game switches the SEAF)")
+			banner_show()
+		else
+			log("KEY CARD FOUND: the dissidents' data is read; switching rebel mode on")
+			switch_on(units, count)
+			units, why = read_units()
+		end
+	elseif key then
 		load_cfg()
 		if rebel.on then
 			if units then restore_soldiers(units, "key pressed") else log("key ignored: the unit list cannot be read (" .. tostring(why) .. "); rebel mode is still on") end
@@ -917,6 +1557,8 @@ local function watch()
 		log(string.format("in mission: %d units registered, %d SEAF soldiers alive", units.units, units.soldiers))
 	end
 	state.units, state.count, state.before, state.would_arm = units, count, count and before or nil, ok
+	local okc, errc = pcall(card_tick, units)
+	if not okc then card_off("stopped on error: " .. tostring(errc)) end
 end
 
 local function tick()
