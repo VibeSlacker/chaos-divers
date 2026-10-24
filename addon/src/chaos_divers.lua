@@ -1,7 +1,7 @@
 -- HD2-Addon: mods/vibeslacker/chaos_divers
--- Chaos Divers: Dissidents Among Us (was "Rebel SEAF", "Dissident Crackdown", then "Dissident Discovery"), test build 0.29 (the key card taken with E only, the same key card on every machine, a lost card replaced by the nearest lore object, one enemy unit enough to pick the rebel side, map marker rebuilt on every move (no Gui.update_text), step-by-step trace kept, voice call address fixed, sentries left alone, voice call), for Bingus Shared Loader v15+.
+-- Chaos Divers: Dissidents Among Us (was "Rebel SEAF", "Dissident Crackdown", then "Dissident Discovery"), release 1.0.0 (built from test 0.31; probe logging off by default; 0.30: no host check: any player's E or key switches rebel mode in their own game, squad defaults to 1; the key card taken with E only, the same key card on every machine, a lost card replaced by the nearest lore object, one enemy unit enough to pick the rebel side, map marker rebuilt on every move (no Gui.update_text), step-by-step trace kept, voice call address fixed, sentries left alone, voice call), for Bingus Shared Loader v15+.
 --
--- Rebel mode: one key (F9 unless the settings file says otherwise) turns the
+-- Rebel mode: one key (none by default from 0.30; the settings file can name one, F9 in test) turns the
 -- SEAF soldiers into an enemy side. The same key switches it off again. Off at
 -- every game start. Helldivers, guard dogs and sentries are never written, so
 -- your own dog and sentries stay on your side and fight the soldiers.
@@ -22,7 +22,7 @@
 -- reason and nothing is written.
 -- It puts the living soldiers back to 0x1 (only where a value still reads what
 -- this mod set) when: the key is pressed again, another Helldiver appears while
--- squad = 0, or the game shuts down. Back on the ship the mode is always off.
+-- squad = 1, or the game shuts down. Back on the ship the mode is always off.
 -- Guard (guard = 1), two parts, both only in a mission while rebel mode is on:
 -- 1. The traitor tally. The game keeps 16 tallies of friendly kills (one per
 --    killer); each kill adds one, ten seconds without a kill takes one off, and
@@ -117,8 +117,16 @@
 --       In a game that is not the host it only shows (banners and the map marker); the host's game switches the SEAF.
 --       The pick no longer skips lore objects near a Helldiver (that differs per machine).
 -- 0.29: the card is taken with E only (Wilson 2026-10-19: walking past it should not fire it; everyone has the mod,
---       each player selects it with E). The walk-up check (0.28's card_near) is gone. A squadmate's E shows only in
---       their own game; the SEAF turn when the host presses E at the card (the copies do not talk to each other).
+--       each player selects it with E). The walk-up check (0.28's card_near) is gone. (Until 0.30 a squadmate's E showed only in
+--       their own game and only the host's E turned the SEAF.)
+-- 0.30: host check removed (Wilson 2026-10-19: "scratch the host only activation"). Everyone has the mod: any player's E at
+--       the card, or the on/off key, switches rebel mode on in that player's own game; nothing asks who hosts. squad now
+--       defaults to 1 (0 would block the mod once a second Helldiver joins). Whether a non-host's writes change what the
+--       host's simulation does is unproven; the log says what each copy did.
+-- 0.31: logging only. A co-op probe (setting probe = 1) writes PROBE lines: this game's host/squadmate role, the SEAF side
+--       values as this machine sees them (and when they change), and every change in the lore objects' and the
+--       Helldivers' interaction state blocks. One log from each machine in a two-player mission shows whether the host
+--       can see a squadmate's E and whether a squadmate's game can see the host's flip. Nothing else changed.
 -- Settings: Logs/ChaosDivers.cfg (key, side, guard, guard_at, squad, banner; read again at every key press)
 -- Log: Logs/ChaosDivers.log (in the CowboyBingus log folder); the last session's
 --      is kept as ChaosDivers.previous.log.
@@ -139,7 +147,7 @@
 --   mission state   -> one object; the game reads the kill count as
 --                      [game.dll slot] + 0x2FC84
 if rawget(_G, "ChaosDivers") then return true end
-local REVISION = "Chaos Divers: Dissidents Among Us test 0.29"
+local REVISION = "Chaos Divers: Dissidents Among Us 1.0.0"
 local state = { revision = REVISION, frames = 0, status = "starting" }
 rawset(_G, "ChaosDivers", state)
 
@@ -281,6 +289,7 @@ end
 
 -- This frame's on/off press, from the bindings page or the settings-file key.
 local function key_pressed(frame, vk)
+	if vk == 0 then return false end   -- 0.30: no manual key by default (Wilson); the intel is the only way in
 	local from_menu, from_file = menu_pressed(frame), pressed(vk)
 	if from_file then menu_key.file_frame = frame end
 	if from_menu and not menu_key.taken then
@@ -294,7 +303,7 @@ end
 
 -- ------------------------------------------------------------------ settings
 local CFG = DIR .. "ChaosDivers.cfg"
-local DEFAULTS = { key = 120, side = 0, guard = 1, guard_at = 1, squad = 0, banner = 1, card = 1, interact = 69, marker = 1 }
+local DEFAULTS = { key = 0, side = 0, guard = 1, guard_at = 1, squad = 1, banner = 1, card = 1, interact = 69, marker = 1, probe = 0 }
 local BAD_KEYS = { [117] = "F6 is the Passive Picker's", [118] = "F7 is the Reroller's", [122] = "F11 is Steam's", [123] = "F12 is Steam's" }
 local function defaults() local t = {} for k, v in pairs(DEFAULTS) do t[k] = v end return t end
 local cfg = defaults()
@@ -306,8 +315,9 @@ local function parse_cfg(text)
 		local n = value and tonumber(value)
 		if name == "key" and n then
 			n = math.floor(n)
-			if n < 1 or n > 254 then notes[#notes + 1] = "key " .. value .. " is not a key number; using F9"
-			elseif BAD_KEYS[n] then notes[#notes + 1] = "key " .. n .. " refused (" .. BAD_KEYS[n] .. "); using F9"
+			if n == 0 then out.key = 0
+			elseif n < 1 or n > 254 then notes[#notes + 1] = "key " .. value .. " is not a key number; using no key"
+			elseif BAD_KEYS[n] then notes[#notes + 1] = "key " .. n .. " refused (" .. BAD_KEYS[n] .. "); using no key"
 			else out.key = n end
 		elseif name == "side" and n then
 			if n == 0 or n == 2 or n == 4 or n == 8 then out.side = n
@@ -316,7 +326,7 @@ local function parse_cfg(text)
 			n = math.floor(n)
 			if n < 1 or n > 254 then notes[#notes + 1] = "interact " .. value .. " is not a key number; using E (69)"
 			else out.interact = n end
-		elseif (name == "guard" or name == "squad" or name == "banner" or name == "card") and n then
+		elseif (name == "guard" or name == "squad" or name == "banner" or name == "card" or name == "probe") and n then
 			if n == 0 or n == 1 then out[name] = n
 			else notes[#notes + 1] = name .. " " .. value .. " refused (only 0 or 1); using " .. DEFAULTS[name] end
 		elseif name == "marker" and n then
@@ -337,10 +347,8 @@ local function load_cfg()
 			local w = io.open(CFG, "w")
 			if w then
 				w:write("# Chaos Divers settings. Read again every time the key is pressed.\n",
-					"# key: Windows key number of the on/off key. 120 = F9. (F6, F7, F11, F12 are refused.)\n",
-					"#   With Mod Bindings Menu installed you can also set it in the game: Options, bindings, MODS tab, CHAOS DIVERS.\n",
-					"#   Once a key set there is used, this one is ignored until the game restarts.\n",
-					"key = 120\n",
+					"# key: 0 = no manual key; the intel is the only way to switch rebel mode on. (Test builds only: a Windows key number, 120 = F9.)\n",
+					"key = 0\n",
 					"# side: the side the SEAF soldiers are put on while rebel mode is on.\n",
 					"#   0 = join whatever enemy holds the map (squids, bugs or bots), chosen each time the mode goes on.\n",
 					"#   4 = always the squids' side.   2 = always the bugs' side.   8 = always the bots' side.\n",
@@ -349,18 +357,20 @@ local function load_cfg()
 					"guard = 1\n",
 					"# guard_at: the count is set back to 0 when it reaches this (1 to 8). 1 = after every kill.\n",
 					"guard_at = 1\n",
-					"# squad: 0 = solo only. 1 = also with other Helldivers in the mission (private lobby, friends who know).\n",
-					"squad = 0\n",
+					"# squad: 1 = also with other Helldivers in the mission (private lobby, friends who know). 0 = solo only.\n",
+					"squad = 1\n",
 					"# banner: 1 = show DISSIDENT CELL DISCOVERED on screen when rebel mode switches on. 0 = off.\n",
 					"banner = 1\n",
 					"# card: 1 = one lore object per mission (the ones that only show text) holds the dissidents' data.\n",
-					"#   Press the interact key next to it to take it; walking past does nothing. In the host's game that switches rebel mode on.\n",
+					"#   Press the interact key next to it to take it; walking past does nothing. In any player's game that switches that game's rebel mode on.\n",
 					"#   Squadmates with the mod see the same marker, and their own banner when they press it. The on/off key still works. 0 = off.\n",
 					"card = 1\n",
 					"# interact: Windows key number of the game's interact key. 69 = E.\n",
 					"interact = 69\n",
 					"# marker: what the card's search area shows on the tactical map. 1 = ring and label, 2 = ring only, 3 = label only, 0 = nothing.\n",
-					"marker = 1\n")
+					"marker = 1\n",
+					"# probe: 1 = log extra PROBE lines for co-op debugging. 0 = off (the default).\n",
+					"probe = 0\n")
 				w:close()
 			end
 		end)
@@ -465,7 +475,7 @@ local function resolve_globals()
 		end
 		if count ~= 1 and s.optional then
 			log(string.format("signature %s matched %d times; %s", s.name, count, s.symbol == "network"
-				and "the key is refused, since this game cannot tell who hosts" or "the banner uses the engine's debug font instead"))
+				and "the host check is gone (0.30), nothing changes" or "the banner uses the engine's debug font instead"))
 		elseif count ~= 1 then
 			error(string.format("signature %s matched %d times (need exactly 1); the game was probably updated", s.name, count), 0)
 		end
@@ -618,26 +628,10 @@ local function detector_copy_at(t, id)
 	end
 end
 
--- ------------------------------------------------------------------ the host
-local NET_LOCAL, NET_HOST = 0xB398, 0xB3A8
--- true when this game hosts, false when someone else does, nil and why when it cannot be read.
-local function is_host()
-	if not globals.network then return nil, "the network signature was not found in this build" end
-	if not readable(globals.network, 8) then return nil, "the network slot is unreadable" end
-	local ctx = ptr(globals.network)
-	if not ctx then return nil, "no network context yet" end
-	if not (readable(ctx + NET_LOCAL, 8) and readable(ctx + NET_HOST, 8)) then return nil, "the network context is unreadable" end
-	local me, host = ffi.cast("const uint32_t *", ctx + NET_LOCAL), ffi.cast("const uint32_t *", ctx + NET_HOST)
-	return me[0] == host[0] and me[1] == host[1]
-end
-
 -- ------------------------------------------------------------------ may rebel mode switch on?
 local function would_arm(units, count)
 	if not units then return false, "the unit list cannot be read" end
 	if units.where ~= "mission" then return false, "not in a mission (" .. units.where .. ")" end
-	local host, unknown = is_host()
-	if host == nil then return false, "cannot tell who hosts (" .. unknown .. ")" end
-	if not host then return false, "this game is not the host (only the host's key works)" end
 	if #units.divers > 1 and cfg.squad ~= 1 then return false, #units.divers .. " Helldivers in the mission (squad = 0: solo only)" end
 	for _, d in ipairs(units.divers) do
 		if d.side ~= SIDE_HOME or d.copy ~= SIDE_HOME then
@@ -1041,8 +1035,7 @@ local function rebel_check(units, why)
 		log("REBEL MODE OFF: no longer in a mission (" .. units.where .. ")")
 		forget()
 	elseif units.where == "mission" then
-		if is_host() == false then restore_soldiers(units, "this game is no longer the host")
-		elseif #units.divers > 1 and cfg.squad ~= 1 then restore_soldiers(units, "another Helldiver is in the mission and squad = 0")
+		if #units.divers > 1 and cfg.squad ~= 1 then restore_soldiers(units, "another Helldiver is in the mission and squad = 0")
 		else set_soldiers(units) end
 	end
 end
@@ -1259,6 +1252,142 @@ local function card_tick(units)
 	end
 end
 
+-- 0.31 co-op probe (read-only, logging only). Wilson 2026-10-19: every diver should get the banners and the hostile
+-- flag whoever takes the intel. The copies do not talk and the SEAF obey the host, so two things have to be learned
+-- from a real two-player mission, one log from each machine:
+--   (1) the host's copy: does a squadmate's E at the intel change anything in the host's memory (the lore object's
+--       state block and record, or the interaction units each Helldiver carries)?  Lines: PROBE CHANGE.
+--   (2) the squadmate's copy: when the host flips the SEAF, do their side values turn hostile in this machine's
+--       memory too (then this copy can fire its own banner)?  Lines: PROBE SEAF SIDES.
+-- Warm-up 15 s: bytes that change then are timers and ignored. A byte that changes more than 6 times is masked.
+local PROBE_ZONE, PROBE_REC, PROBE_WARM_S, PROBE_EVERY, PROBE_MAX_LINES, PROBE_MAX_FLIPS = 49, 0x40, 15, 30, 600, 6
+local probe = { next = 0, start = nil, lines = 0, prev = {}, noisy = {}, flips = {}, sides = nil, net = nil, mission = false }
+state.test.probe = probe
+local function probe_say(text)
+	if probe.lines < PROBE_MAX_LINES then
+		probe.lines = probe.lines + 1
+		log("PROBE " .. text)
+		if probe.lines == PROBE_MAX_LINES then log("PROBE: line limit reached, no more PROBE lines this mission") end
+	end
+end
+-- The state block and record bytes of every lore object and of every Helldiver's interaction units.
+local function probe_scan()
+	if state.pe_timestamp ~= CARD_STAMP then return nil end
+	local slot = base + INTERACTABLE_RVA
+	if not readable(slot, 8) then return nil end
+	local mgr = ptr(slot)
+	if not mgr or not readable(mgr + IT_HEADER, 72) then return nil end
+	local h = mgr + IT_HEADER
+	local cap, active = u32(h), u32(h + 8)
+	if cap > 16384 or active == 0 or active > cap then return nil end
+	local recs, states = ptr(h + 48), ptr(h + 56)
+	if not (recs and states and readable(recs, 8 * active) and readable(states, IT_STATE * active)) then return nil end
+	local t = unit_table()
+	local out = {}
+	for i = 0, active - 1 do
+		local rec = ptr(recs + 8 * i)
+		if rec and readable(rec, 16) then
+			local rn = readable(rec, PROBE_REC) and PROBE_REC or 16   -- the record is longer than 16 bytes in the game
+			local st = states + IT_STATE * i
+			local zones = u32(st + IT_ZONES)
+			local zone = zones > 0 and zones <= 16 and u32(st + IT_ZONE_TYPE) or nil
+			local res = id_hex(rec)
+			local unit = u32(rec + 12)
+			local what = res == DIVER_RES and "diver" or (zone == PROBE_ZONE and "lore" or nil)
+			if what then
+				out[what .. " " .. res .. " " .. string.format("%08x", unit) .. " #" .. i] = {
+					what = what, st = ffi.string(ffi.cast("const char *", st), IT_STATE), rb = ffi.string(ffi.cast("const char *", rec), rn),
+					pos = unit_pos(t, unit) }
+			end
+		end
+	end
+	return out
+end
+local function probe_tick(units)
+	if not units or units.where ~= "mission" then
+		if probe.mission then probe.mission = false; probe.prev, probe.noisy, probe.flips, probe.sides, probe.lines = {}, {}, {}, nil, 0 end
+		return
+	end
+	if state.frames < probe.next then return end
+	probe.next = state.frames + PROBE_EVERY
+	if not probe.mission then
+		probe.mission, probe.start = true, os.time()
+		log(string.format("PROBE: mission started; warming up %d s (stand still, nobody press E)", PROBE_WARM_S))
+	end
+	local warm = os.time() - probe.start < PROBE_WARM_S
+	-- who this game thinks the host is
+	if globals.network and readable(globals.network, 8) then
+		local ctx = ptr(globals.network)
+		if ctx and readable(ctx + 0xB398, 8) and readable(ctx + 0xB3A8, 8) then
+			local me, host = ffi.cast("const uint64_t *", ctx + 0xB398)[0], ffi.cast("const uint64_t *", ctx + 0xB3A8)[0]
+			local text = string.format("this peer %016X, host %016X: %s; Helldivers in the mission %d", tonumber(me % 0x100000000), tonumber(host % 0x100000000),
+				me == host and "THIS GAME HOSTS" or "this game is a squadmate's", #units.divers)
+			if text ~= probe.net then probe.net = text; probe_say("NET " .. text .. " (low 32 bits of the ids)") end
+		end
+	end
+	-- (2) the SEAF side values as this machine sees them
+	local tally, order = {}, {}
+	for _, sd in ipairs(units.soldiers_list) do
+		local k = string.format("0x%X/0x%X", sd.side, sd.copy)
+		if not tally[k] then tally[k] = 0; order[#order + 1] = k end
+		tally[k] = tally[k] + 1
+	end
+	table.sort(order)
+	local parts = {}
+	for i, k in ipairs(order) do parts[i] = k .. " x" .. tally[k] end
+	local sides = #parts > 0 and table.concat(parts, ", ") or "none alive"
+	if sides ~= probe.sides then
+		local was = probe.sides
+		probe.sides = sides
+		if was then
+			probe_say(string.format("SEAF SIDES: %s (was: %s); this copy's rebel mode is %s; local E found the card: %s", sides, was, rebel.on and "ON" or "off", tostring(card.found)))
+		else
+			probe_say("SEAF SIDES: " .. sides .. " (first look)")
+		end
+	end
+	-- (1) the interactable state blocks
+	local scan = probe_scan()
+	if not scan then return end
+	local _, _, divers = inventory()
+	for key, cur in pairs(scan) do
+		local old = probe.prev[key]
+		if old then
+			local mask, flips = probe.noisy[key] or {}, probe.flips[key] or {}
+			probe.noisy[key], probe.flips[key] = mask, flips
+			local changes = {}
+			for _, part in ipairs({ { "state", old.st, cur.st }, { "record", old.rb, cur.rb } }) do
+				local name, a, b = part[1], part[2], part[3]
+				if a ~= b then
+					for off = 1, math.min(#a, #b) do
+						if a:byte(off) ~= b:byte(off) then
+							local id = name .. off
+							if warm then mask[id] = true
+							elseif not mask[id] then
+								flips[id] = (flips[id] or 0) + 1
+								if flips[id] > PROBE_MAX_FLIPS then mask[id] = true
+								elseif #changes < 24 then changes[#changes + 1] = string.format("%s+0x%X %02x->%02x", name, off - 1, a:byte(off), b:byte(off)) end
+							end
+						end
+					end
+				end
+			end
+			if #changes > 0 then
+				local near = "no Helldiver position"
+				if cur.pos and divers and #divers > 0 then
+					local bd
+					for _, p in ipairs(divers) do local d = dist(p, cur.pos) if not bd or d < bd then bd = d end end
+					near = string.format("nearest Helldiver %.1f m", bd)
+				end
+				probe_say(string.format("CHANGE %s at %s, %s, E pressed here lately: %s: %s", key, cur.pos and where(cur.pos) or "no position", near, tostring(card.found), table.concat(changes, ", ")))
+			end
+		elseif not warm then
+			probe_say("appeared " .. key)
+		end
+	end
+	for key in pairs(probe.prev) do if not scan[key] and not warm then probe_say("gone " .. key) end end
+	probe.prev = scan
+end
+
 -- The interact key was pressed: log the nearest interactable; true when it is the card, within reach.
 local function card_interact(units)
 	if card.off or cfg.card ~= 1 or not engine or card.found then return false end
@@ -1338,7 +1467,7 @@ end
 
 -- 0.20 trace: the first MARKER_TRACE draws (and every clear while tracing) log a line before and after each
 -- engine call, so a freeze shows as a "before" line with no "after".
-local MARKER_TRACE = 25
+local MARKER_TRACE = 0
 local function mtrace(text) if marker.trace then log("map trace " .. (marker.draws or 0) .. ": " .. text) end end
 
 local function marker_clear()
@@ -1444,12 +1573,6 @@ local function marker_tick()
 		log(open and "map opened" or ("map closed" .. (v == nil and " (or unreadable)" or "")))
 		marker.beat_at = os.clock() + 1
 	end
-	-- while the map is open, a line a second (the first 60): a freeze after a finished draw shows as these stopping
-	if open and (marker.beats or 0) < 60 and os.clock() >= (marker.beat_at or 0) then
-		marker.beats = (marker.beats or 0) + 1
-		marker.beat_at = os.clock() + 1
-		log("map open, still running (" .. (marker.draws or 0) .. " draws so far)")
-	end
 	if not v or cfg.marker == 0 then
 		if marker.gui then marker_clear() end
 		return
@@ -1460,7 +1583,6 @@ local function marker_tick()
 	marker_draw(v, area)
 	marker.key = { x, y, r }
 	if marker.gui and not marker.said then marker.said = true; log(string.format("map marker: drawn on the tactical map (search area at %.0f %.0f on screen, ring %.0f)", x, y, r)) end
-	if marker.draws == MARKER_TRACE then log("map trace: " .. MARKER_TRACE .. " draws traced, tracing stops here") end
 end
 
 local phase, wait = "start", 240
@@ -1519,14 +1641,9 @@ local function watch()
 	end
 	if found then
 		load_cfg()
-		if is_host() == false then
-			log("KEY CARD FOUND: the dissidents' data is read; this game is not the host, so it only shows it (the host's game switches the SEAF)")
-			banner_show()
-		else
-			log("KEY CARD FOUND: the dissidents' data is read; switching rebel mode on")
-			switch_on(units, count)
-			units, why = read_units()
-		end
+		log("KEY CARD FOUND: the dissidents' data is read; switching rebel mode on")
+		switch_on(units, count)
+		units, why = read_units()
 	elseif key then
 		load_cfg()
 		if rebel.on then
@@ -1538,6 +1655,7 @@ local function watch()
 	elseif rebel.on then
 		rebel_check(units, why)
 	end
+	if cfg.probe == 1 then local okp, errp = pcall(probe_tick, units); if not okp then cfg.probe = 0; log("PROBE stopped on error: " .. tostring(errp)) end end
 	local text
 	if units then
 		local sides = {}
@@ -1571,8 +1689,8 @@ local function tick()
 		if scan_step() then
 			resolve_globals()
 			load_cfg()
-			log(string.format("READY - rebel mode is off. Key %d switches it on in a mission (soldiers to %s, guard %d at %d, squad %d).",
-				cfg.key, cfg.side == 0 and "the enemy's side" or string.format("side 0x%X", cfg.side), cfg.guard, cfg.guard_at, cfg.squad))
+			log(string.format("READY - rebel mode is off. %s switches it on in a mission (soldiers to %s, guard %d at %d, squad %d).",
+				cfg.key == 0 and "The intel" or ("Key " .. cfg.key), cfg.side == 0 and "the enemy's side" or string.format("side 0x%X", cfg.side), cfg.guard, cfg.guard_at, cfg.squad))
 			phase = "watch"
 		end
 	elseif phase == "watch" then

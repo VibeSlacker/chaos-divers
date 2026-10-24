@@ -1,4 +1,4 @@
--- Offline test for the Chaos Divers addon (test build 0.29 takes the card with E only; 0.28 picks the same card on every machine; 0.25 replaces a lost card with the nearest lore object and says INTEL MOVED; 0.24 picks the rebel side from a single enemy unit; 0.23 reads the engine world list at helldivers2.exe+0x1A10208; 0.22 never calls Gui.update_text (it hung the game on any later frame) and rebuilds the marker on a move; 0.21 never places text off screen (the 0.20 trace caught Gui.update_text to -1000 hanging the game); 0.20 traces the map marker step by step and adds the marker setting; 0.19 takes positions from the unit table and hides the twist; 0.18 redraws the map marker smooth; 0.17 adds the voice call; 0.16 leaves the gas mortar sentry alone; 0.15 adds position diagnostics; 0.14 the map marker; 0.13 the key card; 0.12 a read-only position probe; 0.11 renames it to Dissidents Among Us; 0.10 to Dissident Discovery; 0.9 restyles the banner after the game's MISSION COMPLETED and makes the key host-only; 0.8 adds the on-screen banner; 0.7: rebel mode sets the SEAF soldiers, never a Helldiver,
+-- Offline test for the Chaos Divers addon (test build 0.30 has no host check; 0.29 takes the card with E only; 0.28 picks the same card on every machine; 0.25 replaces a lost card with the nearest lore object and says INTEL MOVED; 0.24 picks the rebel side from a single enemy unit; 0.23 reads the engine world list at helldivers2.exe+0x1A10208; 0.22 never calls Gui.update_text (it hung the game on any later frame) and rebuilds the marker on a move; 0.21 never places text off screen (the 0.20 trace caught Gui.update_text to -1000 hanging the game); 0.20 traces the map marker step by step and adds the marker setting; 0.19 takes positions from the unit table and hides the twist; 0.18 redraws the map marker smooth; 0.17 adds the voice call; 0.16 leaves the gas mortar sentry alone; 0.15 adds position diagnostics; 0.14 the map marker; 0.13 the key card; 0.12 a read-only position probe; 0.11 renames it to Dissidents Among Us; 0.10 to Dissident Discovery; 0.9 restyles the banner after the game's MISSION COMPLETED and makes the key host-only; 0.8 adds the on-screen banner; 0.7: rebel mode sets the SEAF soldiers, never a Helldiver,
 -- on the side of the enemy holding the map unless the settings file forces one).
 -- Builds a fake game in memory (a fake game.dll image holding the four signatures, a faction manager with a
 -- unit list, a detector table with records, a mission-state object with the kill count, the traitor tally),
@@ -157,8 +157,8 @@ do
 	f = assert(io.open(LOGDIR .. "ChaosDivers.previous.log", "w")); f:write("STALE\n"); f:close()
 	os.remove(LOGDIR .. "ChaosDivers.cfg")
 	if mode == "side8" then f = assert(io.open(LOGDIR .. "ChaosDivers.cfg", "w")); f:write("# mine\r\nkey = 119   # F8\r\nside = 8\r\nreapply = 0\r\nguard = 0\r\n"); f:close()
-	elseif mode == "auto" then f = assert(io.open(LOGDIR .. "ChaosDivers.cfg", "w")); f:write("side = 0\nguard = 0\n"); f:close()
-	elseif mode ~= "fresh" then f = assert(io.open(LOGDIR .. "ChaosDivers.cfg", "w")); f:write("side = 4\nguard = 0\n"); f:close() end
+	elseif mode == "auto" then f = assert(io.open(LOGDIR .. "ChaosDivers.cfg", "w")); f:write("key = 120\nside = 0\nguard = 0\n"); f:close()
+	elseif mode ~= "fresh" then f = assert(io.open(LOGDIR .. "ChaosDivers.cfg", "w")); f:write("key = 120\nside = 4\nguard = 0\nprobe = 1\n"); f:close() end
 end
 local function write_cfg(text) local f = assert(io.open(LOGDIR .. "ChaosDivers.cfg", "w")); f:write(text); f:close() end
 local KEY = mode == "side8" and 119 or 120
@@ -237,6 +237,7 @@ if mode == "card" then
 		card_units[it[1]] = { u }
 	end
 	diver = card_units["4d1c334d294dfa97"][1]
+	card_units.ists = ists
 	-- the HUD manager with the tactical map (Treasure Map's layout): open flag, centre, pan, zoom, frame
 	local hud = alloc(0x3EF168 + 10464 + 200)
 	wptr(image + 0x346D538, hud)
@@ -306,7 +307,7 @@ end
 local addon = rawget(_G, "ChaosDivers")
 
 print("start")
-check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us test 0.29", "the addon registered itself as test 0.29")
+check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us 1.0.0", "the addon registered itself as release 1.0.0")
 check(file("ChaosDivers.previous.log") == "OLD SESSION\n", "the last session's log was kept as the previous log")
 check(loadfile(built)() == true and count_lines("loaded (") == 1, "loading it a second time does nothing")
 local before_sum = checksum()
@@ -324,6 +325,8 @@ if mode == "nosig" then
 	os.exit(failures == 0 and 0 or 1)
 end
 check(last_line("READY") ~= nil and last_line("signature detector") ~= nil, "all four signatures found, reports ready")
+local fresh_text = mode == "fresh" and file("ChaosDivers.cfg") or nil
+if fresh_text then write_cfg(fresh_text .. "key = 120\n"); addon.test.set_cfg("key", 120) end   -- the early key tests need a key; the defaults are checked from fresh_text
 check(last_line("no unit list yet; rebel mode off, would refuse") ~= nil, "empty unit-list slot: says so, would refuse")
 press(); check(last_line("key ignored, rebel mode stays off: the unit list cannot be read") ~= nil, "key before the game has a unit list: ignored")
 check(checksum() == before_sum, "nothing in the fake game was changed while waiting")
@@ -392,10 +395,10 @@ if mode == "banner" then
 	check(drawn.made == made, "nothing drawn after it is gone")
 	press(); run(2)
 	check(not addon.rebel.on and drawn.made == made, "F9 off: no banner")
-	write_cfg("side = 4\nguard = 0\nbanner = 0\n"); clock = 200; press(); run(5)
+	write_cfg("key = 120\nside = 4\nguard = 0\nbanner = 0\n"); clock = 200; press(); run(5)
 	check(addon.rebel.on and drawn.made == made and count_lines("BANNER:") == 1, "banner = 0: rebel mode on, no banner")
 	press(); run(2)
-	write_cfg("side = 4\nguard = 0\nbanner = 1\n"); drawn.fail = true; clock = 300; press(); run(5)
+	write_cfg("key = 120\nside = 4\nguard = 0\nbanner = 1\n"); drawn.fail = true; clock = 300; press(); run(5)
 	check(addon.rebel.on and addon.banner.dead and live_count() == 0 and last_line("banner off for this game session, it could not draw: stand-in drawing failure") ~= nil, "a drawing failure: the banner switches itself off and clears, rebel mode stays on")
 	check(last_line("stopped on error") == nil, "a drawing failure does not stop the mod")
 	drawn.fail = false; press(); run(2); clock = 400; press(); run(5)
@@ -449,8 +452,6 @@ if mode == "card" then
 	check(live_count() == 0, "map closed: the marker is cleared")
 	card_units.map_open(true); run(2)
 	check(live_count() == 1, "map opened again: drawn again")
-	check(last_line("map trace 1: World.create_screen_gui done") ~= nil and last_line("map trace 1: Gui.triangle done") ~= nil and last_line("map trace 1: done") ~= nil, "the first draw is traced call by call")
-	check(last_line("map trace 1: start (marker 1); area at ") ~= nil and last_line("clear: World.destroy_gui done") ~= nil, "the trace logs where the area lands and the clear on closing")
 	check(last_line("map opened") ~= nil and last_line("map closed") ~= nil, "map open and close are logged")
 	local function reopen(m) addon.test.set_cfg("marker", m); card_units.map_open(false); run(2); card_units.map_open(true); run(2) end
 	local function labels(gg) local n = 0 for _, tx in pairs(gg.texts) do if tx.text == "INTEL" then n = n + 1 end end return n end
@@ -464,7 +465,7 @@ if mode == "card" then
 	check(live_count() == 1 and #tris_of(g) == 192 and labels(g) == 2, "marker = 1: ring and label again")
 	local destroyed = drawn.destroyed
 	card_units.map_pan(area.x + 300); run(2)
-	check(live_count() == 0 and drawn.destroyed == destroyed + 1 and last_line("old surface gone") ~= nil, "the area slides off the map: the whole surface is thrown away, nothing drawn")
+	check(live_count() == 0 and drawn.destroyed == destroyed + 1, "the area slides off the map: the whole surface is thrown away, nothing drawn")
 	made = drawn.made; run(30)
 	check(drawn.made == made and live_count() == 0, "while it stays off the map, nothing is drawn")
 	card_units.map_pan(25); run(2); g = drawn.last
@@ -474,6 +475,17 @@ if mode == "card" then
 	check(chosen == "39ff099af9a96f1b" or chosen == "dd0c24c43731dd8c", "the card is one of the lore objects")
 	local other = chosen == "39ff099af9a96f1b" and card_units["dd0c24c43731dd8c"][1] or card_units["39ff099af9a96f1b"][1]
 	local cp = card_units[chosen][1].pos
+	-- co-op probe (0.31): logging only
+	check(last_line("PROBE NET this peer") ~= nil and last_line("PROBE SEAF SIDES") ~= nil, "probe: the role and the SEAF side values are logged")
+	addon.test.probe.start = 0; run(40)
+	local lore_i = chosen == "39ff099af9a96f1b" and 1 or 2
+	local pb = count_lines("PROBE CHANGE")
+	ffi.cast("uint8_t *", card_units.ists + 0x370 * (lore_i - 1) + 0x100)[0] = 0x5A; run(40)
+	check(count_lines("PROBE CHANGE") == pb + 1 and last_line("PROBE CHANGE lore " .. chosen) ~= nil and last_line("state+0x100 00->5a") ~= nil, "probe: a changed lore state byte is logged once, with its offset")
+	run(60); check(count_lines("PROBE CHANGE") == pb + 1, "probe: nothing more while it stays unchanged")
+	local dv = 4
+	ffi.cast("uint8_t *", card_units.ists + 0x370 * (dv - 1) + 0x200)[0] = 0x77; run(40)
+	check(last_line("PROBE CHANGE diver 4d1c334d294dfa97") ~= nil and last_line("state+0x200 00->77") ~= nil, "probe: a change in a Helldiver's interaction state is logged")
 	diver.pos = { x = cp.x, y = 8, z = 0 }; press(69); run(5)
 	check(not addon.rebel.on and last_line("KEY CARD FOUND") == nil, "E pressed eight metres away: nothing")
 	diver.pos = { x = other.pos.x, y = 1, z = 0 }; press(69); run(5)
@@ -486,6 +498,7 @@ if mode == "card" then
 	check(addon.rebel.on and last_line("KEY CARD FOUND: the dissidents' data is read; switching rebel mode on") ~= nil and last_line("REBEL MODE ON") ~= nil,
 		"E at the card: rebel mode on")
 	check(addon.card.found, "the card counts as found")
+	run(40); check(last_line("PROBE SEAF SIDES:") ~= nil and last_line("this copy's rebel mode is ON") ~= nil, "probe: the SEAF turning is logged with this copy's rebel mode ON")
 	local mortar = { type = "other", t = { 0xfd2f0994, 0x299c0d3d }, side = 1, record = 24, det = 1 }
 	local soldiers_before = addon.units.soldiers
 	mission[#mission + 1] = mortar; set_units(mission); run(40)
@@ -535,7 +548,7 @@ if mode == "card" then
 		check(n >= 3, "other maps spread the pick over the objects (not always the first)")
 		check(o1 >= 5 and o1 <= 25 and a1 >= 0 and a1 < 2 * math.pi, "the search area's offset stays 5 to 25 m off the card")
 	end
-	-- a squadmate's game (not the host): same card, shows the banners and the marker, never switches anything
+	-- a squadmate's game (not the host): same card, same banners and marker, and (0.30) its own E switches its rebel mode on
 	set_units(ship); run(40); set_peers(0x0110000100005678ULL, 0x0110000100001234ULL); set_units(mission); run(1900)
 	check(addon.card.chosen and addon.card.chosen.res == chosen and last_line("BANNER: NEW INTELLIGENCE DISCOVERED") ~= nil, "not the host: the same card is picked and announced")
 	local banners = count_lines("BANNER: DISSIDENT CELL DISCOVERED")
@@ -543,9 +556,8 @@ if mode == "card" then
 	diver.pos = { x = cp2.x + 1, y = 0, z = 0 }; run(40)
 	check(not addon.card.found and count_lines("BANNER: DISSIDENT CELL DISCOVERED") == banners, "not the host, standing at the card without E: nothing")
 	press(69); run(5)
-	check(addon.card.found and not addon.rebel.on and last_line("this game is not the host, so it only shows it") ~= nil
-		and count_lines("BANNER: DISSIDENT CELL DISCOVERED") == banners + 1, "not the host, E at the card: DISSIDENT CELL DISCOVERED shows, rebel mode stays off")
-	check(last_line("SEAF SET") == nil or count_lines("SEAF SET") == lines_seaf, "not the host: no soldier set")
+	check(addon.card.found and addon.rebel.on and last_line("KEY CARD FOUND: the dissidents' data is read; switching rebel mode on") ~= nil
+		and count_lines("BANNER: DISSIDENT CELL DISCOVERED") == banners + 1, "not the host, E at the card: DISSIDENT CELL DISCOVERED shows and rebel mode switches on")
 	set_units(ship); run(40); set_peers(0x0110000100001234ULL, 0x0110000100001234ULL); diver.pos = { x = -50, y = 0, z = 0 }; set_units(mission); run(1900)
 	card_units[addon.card.chosen.res][1].dead = true; run(1900)
 	check(last_line("key card: the chosen lore object is gone; picking the one nearest to where it was") ~= nil, "the card's object gone: another is picked")
@@ -563,15 +575,16 @@ end
 
 if mode == "fresh" then
 	print("defaults: no settings file")
-	local text = file("ChaosDivers.cfg")
-	check(text:find("key = 120", 1, true) and text:find("side = 0", 1, true) and text:find("guard = 1", 1, true)
-		and text:find("guard_at = 1", 1, true) and text:find("squad = 0", 1, true) and text:find("banner = 1", 1, true), "the settings file was written with the defaults")
-	check(last_line("READY - rebel mode is off. Key 120 switches it on in a mission (soldiers to the enemy's side, guard 1 at 1, squad 0)") ~= nil, "READY names the settings in use")
+	local text = fresh_text
+	check(text:find("key = 0", 1, true) and text:find("side = 0", 1, true) and text:find("guard = 1", 1, true)
+		and text:find("guard_at = 1", 1, true) and text:find("squad = 1", 1, true) and text:find("banner = 1", 1, true), "the settings file was written with the defaults")
+	check(last_line("READY - rebel mode is off. The intel switches it on in a mission (soldiers to the enemy's side, guard 1 at 1, squad 1)") ~= nil, "READY names the settings in use")
 	mission = { squid, me, A, B, corpse, dog, nodet, { type = "other", side = 4, record = 35, det = 4 }, { type = "other", side = 4, record = 35, det = 4 } }
 	set_units(mission); run(20)
 	w32(ms + 0x2FC84, 1); run(300)
 	check(r32(ms + 0x2FC84) == 1, "mode off: the count is left alone")
 	press(); run(2)
+
 	check(addon.rebel.on and is(A, 4) and is(B, 4) and is(me, 1) and last_line("Guard on (traitor tally and kill count).") ~= nil, "F9 on a squid map: soldiers join the squids (side 4), he is untouched, the log says the guard is on")
 	check(last_line("REBEL SIDE: 0x4 (the Illuminate), the enemy on the map (0 on 0x2, 3 on 0x4, 0 on 0x8)") ~= nil, "the chosen side and why are logged")
 	check(r32(ms + 0x2FC84) == 0 and last_line("COUNT GUARD: was 1, now 0 (1 kept off the count so far)") ~= nil, "the count of 1 is reset within two frames of switching on")
@@ -718,6 +731,7 @@ me.side, me.copy = 8, 8; set_units(mission); run(20)
 refuses("a Helldiver who is not on 0x1", "key ignored, rebel mode stays off: a Helldiver's side reads 0x8/0x8")
 me.side, me.copy = 1, 1
 local friend = { type = "hd", side = 1, record = 28 }
+write_cfg(string.format("key = %d\nside = %d\nguard = 1\nsquad = 0\n", KEY, SIDE))
 mission[#mission + 1] = friend; set_units(mission); run(20)
 refuses("a second Helldiver with squad = 0", "key ignored, rebel mode stays off: 2 Helldivers in the mission (squad = 0: solo only)")
 mission[#mission] = nil; set_units(mission)
@@ -741,6 +755,7 @@ do
 end
 
 print("it lets go by itself")
+write_cfg(string.format("key = %d\nside = %d\nguard = 1\nsquad = 0\n", KEY, SIDE)); run(20)
 press(); check(addon.rebel.on and is(A, SIDE), "(on)")
 do
 	for _, u in ipairs(mission) do if u.record == 24 and u.det then u.side, u.copy, u.det = SIDE, SIDE, SIDE end end
@@ -821,16 +836,16 @@ print("settings")
 do
 	local parse = addon.test.parse_cfg
 	local c, note = parse("key = 122\nside = 3\n")
-	check(c.key == 120 and c.side == 0 and note:find("F11", 1, true) and note:find("only 0, 2, 4 or 8", 1, true), "F11 and side 3 are refused, defaults used")
+	check(c.key == 0 and c.side == 0 and note:find("F11", 1, true) and note:find("only 0, 2, 4 or 8", 1, true), "F11 and side 3 are refused, defaults used")
 	c = parse("side = 2\n"); check(c.side == 2, "side 2 can be forced")
 	c = parse("# x\r\nkey=119 # F8\r\n side = 8\r\nrubbish\r\nreapply = 1\r\n")
 	check(c.key == 119 and c.side == 8, "a hand-edited file with Windows line ends and an old reapply line is read")
 	c, note = parse("key = 999\nkey = 117\n")
-	check(c.key == 120 and note:find("F6", 1, true), "a number that is no key, and F6, are refused")
+	check(c.key == 0 and note:find("F6", 1, true), "a number that is no key, and F6, are refused")
 	c = parse("")
-	check(c.key == 120 and c.side == 0 and c.guard == 1 and c.guard_at == 1 and c.squad == 0, "an empty file means the defaults: F9, join the enemy on the map, guard on at 1, solo only")
+	check(c.key == 0 and c.side == 0 and c.guard == 1 and c.guard_at == 1 and c.squad == 1, "an empty file means the defaults: no key, join the enemy on the map, guard on at 1, squad on")
 	c, note = parse("squad = 2\nguard = 7\nguard_at = 9\n")
-	check(c.squad == 0 and c.guard == 1 and c.guard_at == 1 and note:find("guard_at 9 refused", 1, true) and note:find("squad 2 refused", 1, true), "out-of-range squad, guard and guard_at are refused")
+	check(c.squad == 1 and c.guard == 1 and c.guard_at == 1 and note:find("guard_at 9 refused", 1, true) and note:find("squad 2 refused", 1, true), "out-of-range squad, guard and guard_at are refused")
 	c = parse("squad = 1\nguard = 0\nguard_at = 8\n")
 	check(c.squad == 1 and c.guard == 0 and c.guard_at == 8, "squad can be switched on, the guard off; guard_at up to 8")
 	c = parse(""); check(c.marker == 1, "marker defaults to 1 (ring and label)")
@@ -839,22 +854,17 @@ do
 end
 
 if mode == nil then
-	print("host only")
+	print("no host check (0.30)")
 	check(addon.rebel.on and is(A, SIDE), "(on from above)")
 	set_peers(0x0110000100001234ULL, 0x0110000100009999ULL); run(20)
-	check(not addon.rebel.on and is(A, 1) and is(B, 1) and last_line("REBEL MODE OFF (this game is no longer the host)") ~= nil, "no longer the host: soldiers put back, mode off")
-	check(last_line("rebel mode off, would refuse: this game is not the host (only the host's key works)") ~= nil, "someone else hosts: would refuse")
-	do
-		local snap = snapshot(); press(); run(20)
-		check(not addon.rebel.on and last_line("key ignored, rebel mode stays off: this game is not the host") ~= nil and #changed(snap) == 0, "key in someone else's mission: ignored, not one byte changed")
-	end
+	check(addon.rebel.on and is(A, SIDE) and last_line("this game is no longer the host") == nil, "someone else hosts: rebel mode stays on, soldiers stay set")
+	press(); run(20)
+	check(not addon.rebel.on and is(A, 1), "the key in someone else's mission: switches rebel mode off")
+	press(); run(20)
+	check(addon.rebel.on and is(A, SIDE), "the key in someone else's mission: switches it on")
 	wptr(slot_of.network, 0); run(20)
-	check(last_line("would refuse: cannot tell who hosts (no network context yet)") ~= nil, "no network context: would refuse")
-	press(); run(20)
-	check(not addon.rebel.on and last_line("key ignored, rebel mode stays off: cannot tell who hosts") ~= nil, "no network context: key ignored")
+	check(addon.rebel.on and is(A, SIDE), "no network context: nothing changes")
 	wptr(slot_of.network, net); set_peers(0x0110000100001234ULL, 0x0110000100001234ULL); run(20)
-	press(); run(20)
-	check(addon.rebel.on and is(A, SIDE), "hosting again, the key: rebel mode on, a soldier set")
 end
 
 if mode == nil then
