@@ -26,3 +26,7 @@ python3 ../tools/make_release.py build ../release Chaos-Divers-Dissidents-Among-
 ## Thanks
 
 CowboyBingus for Bingus Shared Loader.
+
+## Support
+
+If you like my mods, you can support me at https://ko-fi.com/vibeslacker
