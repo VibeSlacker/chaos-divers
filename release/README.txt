@@ -1,6 +1,13 @@
-Chaos Divers: Dissidents Among Us 1.0.0
+Chaos Divers: Dissidents Among Us 1.0.1
 by vibeslacker
 Made with AI. Gameplay change for HellForge (Bingus Shared Loader mod).
+
+CHANGELOG
+1.0.1  The intel now uses your game's own interact key instead of a fixed E,
+       so players who rebound it can take the intel. If the game's key can't
+       be read, it falls back to E. A number in ChaosDivers.cfg (interact) still
+       forces a key.
+1.0.0  First release.
 
 THE STORY
 It starts as a routine drop. Then the truth comes out: the SEAF squads on

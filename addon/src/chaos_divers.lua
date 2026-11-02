@@ -1,5 +1,5 @@
 -- HD2-Addon: mods/vibeslacker/chaos_divers
--- Chaos Divers: Dissidents Among Us (was "Rebel SEAF", "Dissident Crackdown", then "Dissident Discovery"), release 1.0.0 (built from test 0.31; probe logging off by default; 0.30: no host check: any player's E or key switches rebel mode in their own game, squad defaults to 1; the key card taken with E only, the same key card on every machine, a lost card replaced by the nearest lore object, one enemy unit enough to pick the rebel side, map marker rebuilt on every move (no Gui.update_text), step-by-step trace kept, voice call address fixed, sentries left alone, voice call), for Bingus Shared Loader v15+.
+-- Chaos Divers: Dissidents Among Us (was "Rebel SEAF", "Dissident Crackdown", then "Dissident Discovery"), release 1.0.1 (1.0.1: the interact key is the game's own, read from its key records, not a fixed E; built from test 0.31; probe logging off by default; 0.30: no host check: any player's E or key switches rebel mode in their own game, squad defaults to 1; the key card taken with E only, the same key card on every machine, a lost card replaced by the nearest lore object, one enemy unit enough to pick the rebel side, map marker rebuilt on every move (no Gui.update_text), step-by-step trace kept, voice call address fixed, sentries left alone, voice call), for Bingus Shared Loader v15+.
 --
 -- Rebel mode: one key (none by default from 0.30; the settings file can name one, F9 in test) turns the
 -- SEAF soldiers into an enemy side. The same key switches it off again. Off at
@@ -147,7 +147,7 @@
 --   mission state   -> one object; the game reads the kill count as
 --                      [game.dll slot] + 0x2FC84
 if rawget(_G, "ChaosDivers") then return true end
-local REVISION = "Chaos Divers: Dissidents Among Us 1.0.0"
+local REVISION = "Chaos Divers: Dissidents Among Us 1.0.1"
 local state = { revision = REVISION, frames = 0, status = "starting" }
 rawset(_G, "ChaosDivers", state)
 
@@ -303,7 +303,7 @@ end
 
 -- ------------------------------------------------------------------ settings
 local CFG = DIR .. "ChaosDivers.cfg"
-local DEFAULTS = { key = 0, side = 0, guard = 1, guard_at = 1, squad = 1, banner = 1, card = 1, interact = 69, marker = 1, probe = 0 }
+local DEFAULTS = { key = 0, side = 0, guard = 1, guard_at = 1, squad = 1, banner = 1, card = 1, interact = 0, marker = 1, probe = 0 }   -- interact 0 = follow the game's own interact key (1.0.1)
 local BAD_KEYS = { [117] = "F6 is the Passive Picker's", [118] = "F7 is the Reroller's", [122] = "F11 is Steam's", [123] = "F12 is Steam's" }
 local function defaults() local t = {} for k, v in pairs(DEFAULTS) do t[k] = v end return t end
 local cfg = defaults()
@@ -324,7 +324,8 @@ local function parse_cfg(text)
 			else notes[#notes + 1] = "side " .. value .. " refused (only 0, 2, 4 or 8); using 0 (join the enemy on the map)" end
 		elseif name == "interact" and n then
 			n = math.floor(n)
-			if n < 1 or n > 254 then notes[#notes + 1] = "interact " .. value .. " is not a key number; using E (69)"
+			if n == 0 or n == 69 then out.interact = 0   -- 0 follows the game; 69 is what 1.0.0 wrote into every settings file, so it means the same
+			elseif n < 1 or n > 254 then notes[#notes + 1] = "interact " .. value .. " is not a key number; following the game's own interact key"
 			else out.interact = n end
 		elseif (name == "guard" or name == "squad" or name == "banner" or name == "card" or name == "probe") and n then
 			if n == 0 or n == 1 then out[name] = n
@@ -365,8 +366,8 @@ local function load_cfg()
 					"#   Press the interact key next to it to take it; walking past does nothing. In any player's game that switches that game's rebel mode on.\n",
 					"#   Squadmates with the mod see the same marker, and their own banner when they press it. The on/off key still works. 0 = off.\n",
 					"card = 1\n",
-					"# interact: Windows key number of the game's interact key. 69 = E.\n",
-					"interact = 69\n",
+					"# interact: 0 = use the game's own interact key, whatever it is bound to (the default). Or a Windows key number to force one (69 = E).\n",
+					"interact = 0\n",
 					"# marker: what the card's search area shows on the tactical map. 1 = ring and label, 2 = ring only, 3 = label only, 0 = nothing.\n",
 					"marker = 1\n",
 					"# probe: 1 = log extra PROBE lines for co-op debugging. 0 = off (the default).\n",
@@ -1388,6 +1389,58 @@ local function probe_tick(units)
 	probe.prev = scan
 end
 
+-- 1.0.1: the interact key is the game's own, not a fixed E. The game keeps it as a Windows key code in a pool of
+-- 32 records (0x17D0 apart, in the game context at game.dll+0x3326340, +0x7A41E1C; the code is the first dword of a
+-- record). On the ship only the records in use follow the setting and the rest stay
+-- at the default 69; in a mission all 32 do. So: the first value that is not 69, else 69. Found by rebinding interact
+-- to J and back (69 to 74 to 69) with a live read-only hunt, build 25480438 layout. While the game loads the records
+-- read 0; anything that does not look like the pool keeps the last good key, or E before there was one.
+local ikey = { vk = 69, src = "start", next = 0, said = nil, POOL = 0x7A41E1C, STRIDE = 0x17D0, COUNT = 32 }   -- fields of state: the script is at Lua's 200-locals limit
+state.ikey = ikey
+function ikey.read()
+	if state.pe_timestamp ~= VOICE_STAMP then return nil, "game.dll is not build 25480438" end
+	local slot = base + GAME_CONTEXT_RVA
+	if not readable(slot, 8) then return nil, "game context slot unreadable" end
+	local ctx = ptr(slot)
+	if not ctx then return nil, "no game context" end
+	local first = ctx + ikey.POOL
+	if not readable(first - 4, ikey.STRIDE * (ikey.COUNT - 1) + 8) then return nil, "key records unreadable" end
+	-- (the dword before a live record is a changing counter in a mission, so it is not checked; the values are: every
+	-- record must be a key code, and they may only be E or one other key, which a wrong address would not satisfy)
+	local found = 69
+	for i = 0, ikey.COUNT - 1 do
+		local v = u32(first + ikey.STRIDE * i)
+		if v < 1 or v > 254 then return nil, string.format("record %d does not look like a key (%d)", i, v) end
+		if v ~= 69 then
+			if found ~= 69 and v ~= found then return nil, string.format("the key records disagree (%d and %d)", found, v) end
+			found = v
+		end
+	end
+	return found
+end
+-- The key to watch this frame: a number in the settings file wins, else the game's own (re-read once a second).
+function ikey.key(frame)
+	if cfg.interact ~= 0 then
+		if ikey.vk ~= cfg.interact or ikey.src ~= "settings" then
+			ikey.vk, ikey.src = cfg.interact, "settings"
+			log(string.format("interact key: %d (set in ChaosDivers.cfg)", ikey.vk))
+		end
+		return ikey.vk
+	end
+	if frame >= ikey.next then
+		ikey.next = frame + 60
+		local vk, why = ikey.read()
+		local src = vk and "game" or "fallback"
+		if vk then ikey.vk = vk end
+		if ikey.src ~= src or (vk and ikey.said ~= vk) then
+			ikey.src, ikey.said = src, vk or ikey.said
+			if vk then log(string.format("interact key: %d (the game's own)", vk))
+			else log(string.format("interact key: %d (cannot read the game's: %s; keeping this one)", ikey.vk, tostring(why))) end
+		end
+	end
+	return ikey.vk
+end
+
 -- The interact key was pressed: log the nearest interactable; true when it is the card, within reach.
 local function card_interact(units)
 	if card.off or cfg.card ~= 1 or not engine or card.found then return false end
@@ -1405,7 +1458,7 @@ local function card_interact(units)
 	table.sort(near, function (a, b) return a.d < b.d end)
 	local dv = {}
 	for i, p in ipairs(divers) do dv[i] = where(p) end
-	log(string.format("interact: E pressed; Helldivers at %s; %d interactables within 6 m", table.concat(dv, " / "), #near))
+	log(string.format("interact: key %d pressed; Helldivers at %s; %d interactables within 6 m", ikey.vk, table.concat(dv, " / "), #near))
 	for i = 1, math.min(3, #near) do
 		local it, d = near[i].it, near[i].d
 		log(string.format("interact: %s interactable %s, zone type %s, %.1f m, at %s%s", i == 1 and "nearest" or ("number " .. i), it.res, tostring(it.zone), d, where(it.pos),
@@ -1631,7 +1684,7 @@ local function watch()
 		end
 	end
 	local key = key_pressed(state.frames, cfg.key)
-	local interact = cfg.card == 1 and not card.off and not rebel.on and pressed(cfg.interact)
+	local interact = cfg.card == 1 and not card.off and not rebel.on and pressed(ikey.key(state.frames))
 	if not (key or interact or state.frames % (rebel.on and 5 or 15) == 0) then return end
 	local units, why = read_units()
 	local found = false

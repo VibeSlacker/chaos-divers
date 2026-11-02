@@ -307,7 +307,7 @@ end
 local addon = rawget(_G, "ChaosDivers")
 
 print("start")
-check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us 1.0.0", "the addon registered itself as release 1.0.0")
+check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us 1.0.1", "the addon registered itself as release 1.0.1")
 check(file("ChaosDivers.previous.log") == "OLD SESSION\n", "the last session's log was kept as the previous log")
 check(loadfile(built)() == true and count_lines("loaded (") == 1, "loading it a second time does nothing")
 local before_sum = checksum()
@@ -567,6 +567,44 @@ if mode == "card" then
 		local list = { { res = "far", pos = { x = 500, y = 0, z = 0 } }, { res = "close", pos = { x = 20, y = 5, z = 0 } }, { res = "mid", pos = { x = -60, y = 0, z = 0 } } }
 		local best, d = near(list, { x = 0, y = 0, z = 0 })
 		check(best.res == "close" and math.abs(d - math.sqrt(425)) < 0.01, "nearest_lore picks the closest of three, not the first or a random one")
+	end
+	-- 1.0.1: the interact key is the game's own (key records in the game context: 32 x 0x17D0 from +0x7A41E1C; the dword before a live record is a counter)
+	do
+		check(last_line("interact key: 69 (cannot read the game's: key records unreadable") ~= nil, "no key records in the fake game (zeros, as while the game loads): E kept, and the log says why")
+		local old = tonumber(ffi.cast("uint64_t *", image + 0x3326340)[0])
+		local POOL, STRIDE = 0x7A41E1C, 0x17D0
+		local big = alloc(POOL + 32 * STRIDE + 64)
+		ffi.copy(ffi.cast("void *", big), ffi.cast("void *", old), 0x1100)
+		wptr(image + 0x3326340, big)
+		local function pool(fn) for i = 0, 31 do local at = big + POOL + STRIDE * i; w32(at - 4, i % 3 == 0 and 0xFFFFFFFF or 0x9E + i * 7); w32(at, fn(i)) end end
+		pool(function (i) return 69 end); run(70)
+		check(addon.ikey.vk == 69 and last_line("interact key: 69 (the game's own)") ~= nil, "records all at E: the game's key is E")
+		pool(function (i) return (i == 2 or i == 3 or i == 10 or i == 11) and 74 or 69 end); run(70)
+		check(addon.ikey.vk == 74 and last_line("interact key: 74 (the game's own)") ~= nil, "on the ship (4 records follow the setting, 28 stay at E): the key is J (74)")
+		set_units(ship); run(40); diver.pos = { x = -50, y = 0, z = 0 }; set_units(mission); run(1900)
+		local c3 = addon.card.chosen
+		check(c3 ~= nil and not addon.card.found and not addon.rebel.on, "a fresh mission with the key at J: the card is picked, not found")
+		local cp3 = card_units[c3.res][1].pos
+		diver.pos = { x = cp3.x + 1, y = 0, z = 0 }; run(40)
+		local e_logged = count_lines("interact: key 69 pressed")
+		press(69); run(5)
+		check(not addon.card.found and not addon.rebel.on and count_lines("interact: key 69 pressed") == e_logged, "J bound: E at the card does nothing (and is not even logged)")
+		press(74); run(5)
+		check(addon.card.found and addon.rebel.on and last_line("interact: key 74 pressed") ~= nil, "J bound: J at the card finds it and switches rebel mode on")
+		set_units(ship); run(40); diver.pos = { x = -50, y = 0, z = 0 }; set_units(mission); run(1900)
+		pool(function (i) return 0 end); run(70)
+		check(addon.ikey.vk == 74 and last_line("interact key: 74 (cannot read the game's: record 0 does not look like a key (0); keeping this one)") ~= nil, "the records read 0 again (game loading): the last good key (J) is kept")
+		pool(function (i) return 300 end); run(70)
+		check(addon.ikey.vk == 74, "a value that is not a key code (300): ignored")
+		pool(function (i) return 74 end); run(70)
+		pool(function (i) return i == 4 and 88 or (i < 16 and 74 or 69) end); run(70)
+		check(addon.ikey.vk == 74 and last_line("the key records disagree (74 and 88)") ~= nil, "two different non-E keys in the records (a wrong address): ignored, the last good key stays")
+		pool(function (i) return 74 end); run(70)
+		check(addon.ikey.vk == 74 and last_line("interact key: 74 (the game's own)") ~= nil, "changing counters in the dwords before the records do not matter")
+		local o = addon.test.parse_cfg("interact = 69\r\n")
+		check(o.interact == 0, "interact = 69 in an old settings file means follow the game")
+		check(addon.test.parse_cfg("interact = 0\n").interact == 0 and addon.test.parse_cfg("interact = 88\n").interact == 88 and addon.test.parse_cfg("").interact == 0, "interact = 0 or missing: follow the game; a number: forced")
+		wptr(image + 0x3326340, old)
 	end
 	check(last_line("stopped on error") == nil and last_line("key card off") == nil, "no errors, the card stayed on")
 	print(failures == 0 and "ALL PASSED" or (failures .. " FAILED"))
