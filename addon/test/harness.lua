@@ -81,8 +81,8 @@ local ents, recs, masks = alloc(8 * 512), alloc(0x60 * 512), alloc(4 * 512)
 w32(mgr + 0x12030, 0x200)
 wptr(mgr + 0x12068, ents); wptr(mgr + 0x12070, recs); wptr(mgr + 0x12078, masks)
 -- detector: a lookup table of (id, slot) pairs and records of 0x13F8 bytes, the side copy at +0x13E8
-local DSIZE, DEMPTY, DSTEP = 64, 0xFFFFFFFF, 2654435761
-local det, dtab, drecs = alloc(0x60), alloc(8 * DSIZE), alloc(0x13F8 * 40)
+local DSIZE, DEMPTY, DSTEP = 512, 0xFFFFFFFF, 2654435761
+local det, dtab, drecs = alloc(0x60), alloc(8 * DSIZE), alloc(0x13F8 * 400)
 wptr(det + 0x30, dtab); w32(det + 0x38, DSIZE); w32(det + 0x3C, DEMPTY); w32(det + 0x40, DSTEP); wptr(det + 0x50, drecs)
 local dslots = 0
 local function det_at(u) return drecs + u.dslot * 0x13F8 + 0x13E8 end
@@ -217,7 +217,7 @@ local function unit_standin(obj, id)
 end
 local diver
 if mode == "card" then
-	local items = { { "39ff099af9a96f1b", 49, 10 }, { "dd0c24c43731dd8c", 49, 30 }, { "79ccffd281e3f3a9", 4, 50 }, { "4d1c334d294dfa97", 41, 0 } }
+	local items = { { "39ff099af9a96f1b", 49, 10 }, { "dd0c24c43731dd8c", 49, 30 }, { "79ccffd281e3f3a9", 4, 50 }, { "4d1c334d294dfa97", 41, -50 } }
 	local itm = alloc(0x14100)
 	local irecs, ists = alloc(8 * #items), alloc(0x370 * #items)
 	wptr(image + 0x3326D68, itm)
@@ -305,9 +305,11 @@ local function count_lines(pattern)
 	return n
 end
 local addon = rawget(_G, "ChaosDivers")
+addon.test.override = { drop_wait = 0, hostile_cap = 0, hostile = 100 }   -- the earlier tests have no unit positions and expect an instant turn; the 1.3.2 tests set it back
+do local c = addon.test.parse_cfg("") ; addon.test.set_cfg("drop_wait", 0); addon.test.set_cfg("hostile_cap", 0); addon.test.set_cfg("hostile", 100) end
 
 print("start")
-check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us 1.0.1", "the addon registered itself as release 1.0.1")
+check(addon ~= nil and addon.revision == "Chaos Divers: Dissidents Among Us 1.1.0", "the addon registered itself as release 1.1.0")
 check(file("ChaosDivers.previous.log") == "OLD SESSION\n", "the last session's log was kept as the previous log")
 check(loadfile(built)() == true and count_lines("loaded (") == 1, "loading it a second time does nothing")
 local before_sum = checksum()
@@ -605,6 +607,110 @@ if mode == "card" then
 		check(o.interact == 0, "interact = 69 in an old settings file means follow the game")
 		check(addon.test.parse_cfg("interact = 0\n").interact == 0 and addon.test.parse_cfg("interact = 88\n").interact == 88 and addon.test.parse_cfg("").interact == 0, "interact = 0 or missing: follow the game; a number: forced")
 		wptr(image + 0x3326340, old)
+	end
+	-- 1.1.0: the pick band, the shared anchor, the re-roll key
+	do
+		local pick = addon.test.card_pick
+		local function lore(list) local t = {} for i, v in ipairs(list) do t[i] = { res = v[1], pos = { x = v[2], y = v[3], z = v[4] or 0 } } end return t end
+		local O = { x = 0, y = 0 }
+		-- 1. only objects 60 to 250 m from the anchor are candidates
+		local m1 = { { "near", 10, 0 }, { "ok1", 100, 0 }, { "ok2", 0, -200 }, { "far", 400, 0 }, { "toofar", 0, 300 } }
+		local seen = {}
+		for k = 1, 60 do local m = lore(m1); m[1].pos.x = 10 + k * 0.3; m[4].pos.x = 400 + k * 11; local c, _, _, _, pool, how = pick(m, O)
+			seen[c.res] = true; check(#pool == 2 and how == "inside the band", "band: two candidates, " .. k) if failures > 0 then break end end
+		check(seen.ok1 and seen.ok2 and not seen.near and not seen.far and not seen.toofar, "band: only objects 60 to 250 m from the anchor are ever picked, and both of them are")
+		-- the band edges are inclusive, and the distance is flat (height does not count)
+		local c, _, _, _, pool = pick(lore({ { "edge60", 60, 0 }, { "edge250", 0, 250 }, { "hi", 59, 0, 500 } }), O)
+		check(#pool == 2 and (c.res == "edge60" or c.res == "edge250"), "band: 60 m and 250 m count, a tall object 59 m away does not")
+		-- 2. nothing in the band: the nearest beyond it, else the farthest closer one
+		c, _, _, _, pool = pick(lore({ { "a", 10, 0 }, { "b", 400, 0 }, { "c", 300, 0 } }), O)
+		check(c.res == "c" and #pool == 1, "band empty: the nearest object beyond it")
+		c, _, _, _, pool = pick(lore({ { "a", 10, 0 }, { "b", 40, 0 }, { "c", 20, 0 } }), O)
+		check(c.res == "b" and #pool == 1, "band empty and none beyond: the farthest of those closer")
+		-- 3. no anchor: every object is a candidate (the 1.0.1 behaviour)
+		c, _, _, _, pool = pick(lore({ { "a", 10, 0 }, { "b", 40, 0 }, { "c", 20, 0 } }))
+		check(#pool == 3, "no anchor: any object may be picked")
+		-- 4. the same pick on every machine, and the fingerprint is the 1.0.1 one
+		local map = { { "a", 120, -40 }, { "b", -300, 12 }, { "c", 15, 260 }, { "d", 15, -260 }, { "e", 88, 3 }, { "f", -140, 90 } }
+		local p1, _, _, s1 = pick(lore(map), O)
+		local rev = {} for i = #map, 1, -1 do rev[#rev + 1] = map[i] end
+		local p2, _, _, s2 = pick(lore(rev), O)
+		check(p1.res == p2.res and s1 == s2, "band: another listing order, the same pick")
+		local _, _, _, s0 = pick(lore(map))
+		check(s0 == s1, "the fingerprint does not depend on the anchor")
+		-- 5. re-roll counter: another object each time, never a rejected one, the same on every copy
+		local skip, got, prev = {}, {}, nil
+		for n = 0, 3 do
+			local ch = pick(lore(map), O, skip, n)
+			check(not skip[ch.ks], "re-roll " .. n .. ": a rejected object is never picked")
+			local ch2 = pick(lore(rev), O, skip, n)
+			check(ch.res == ch2.res, "re-roll " .. n .. ": the same object on another copy")
+			got[#got + 1] = ch.res; skip[ch.ks] = true
+		end
+		local uniq = {} for _, r in ipairs(got) do uniq[r] = true end
+		local nu = 0 for _ in pairs(uniq) do nu = nu + 1 end
+		check(nu == 4, "four re-rolls, four different objects (the band holds five of the six): " .. table.concat(got, " "))
+		-- everything rejected: starts over, says so
+		local all = {} for _, v in ipairs(lore(map)) do all[math.floor(v.pos.x + 0.5) .. "," .. math.floor(v.pos.y + 0.5) .. ",0"] = true end
+		local ch, _, _, _, pl, _, reset = pick(lore(map), O, all, 5, "-140,90,0")
+		check(ch ~= nil and reset == true and #pl > 0 and ch.ks ~= "-140,90,0", "every object rejected: the list starts over, the one just rejected stays out")
+		-- 6. the anchor: centroid of the flat positions, rounded to 50 m
+		local an = addon.card.anchor
+		check(an(nil) == nil and an({}) == nil, "anchor: none without a Helldiver")
+		local a1 = an({ { x = 10, y = -10, z = 99 }, { x = 12, y = -12, z = -5 } })
+		check(a1.x == 0 and a1.y == 0, "anchor: close to the origin rounds to 0 (height ignored)")
+		local a2 = an({ { x = 26, y = 74, z = 0 } })
+		check(a2.x == 50 and a2.y == 50, "anchor: 26 rounds to 50, 74 to 50")
+		local a3 = an({ { x = 20, y = 0, z = 0 }, { x = 24, y = 0, z = 0 } })
+		check(a3.x == 0, "anchor: a squad 22 m out still rounds to 0, so small differences between copies agree")
+	end
+	do   -- the pick in a mission, and the re-roll key
+		card_units["39ff099af9a96f1b"][1].dead = false; card_units["dd0c24c43731dd8c"][1].dead = false   -- the earlier test destroyed one
+		set_units(ship); run(40); set_peers(0x0110000100001234ULL, 0x0110000100001234ULL); diver.pos = { x = -50, y = 0, z = 0 }; set_units(mission)
+		addon.test.set_cfg("reroll", 121)
+		run(300); press(121); run(5)
+		check(last_line("re-roll ignored: there is no intel picked right now") ~= nil and addon.card.rerolls == 0, "re-roll before any intel is picked: ignored, and says so")
+		run(1600)
+		check(addon.card.chosen ~= nil and last_line("key card: anchor -50 0 ") ~= nil and last_line("2 candidates, inside the band") ~= nil, "the pick logs the anchor and the candidates")
+		check(count_lines("m from the anchor (in the band)") >= 2 and count_lines("m height against the first Helldiver") >= 2, "each lore object's distance and height is logged")
+		local first = addon.card.chosen.res
+		local banners = count_lines("BANNER: INTEL MOVED")
+		press(121); run(5)
+		check(addon.card.rerolls == 1 and addon.card.chosen and addon.card.chosen.res ~= first and last_line("RE-ROLL 1:") ~= nil, "the re-roll key: another object is picked at once")
+		check(last_line("key card: re-roll 1 picked another object") ~= nil and count_lines("BANNER: INTEL MOVED") == banners + 1, "the re-roll shows INTEL MOVED")
+		local second = addon.card.chosen.res
+		press(121); run(5)
+		check(addon.card.rerolls == 1 and addon.card.chosen.res == second, "pressed again within two seconds: ignored (debounce)")
+		run(150); press(121); run(5)
+		check(addon.card.rerolls == 2 and addon.card.chosen and last_line("every object had been rejected, so the list was cleared") ~= nil, "both objects rejected, a third press: the list starts over")
+		check(addon.card.chosen.res == first, "after the restart the one just rejected stays out: back to the first object")
+		-- the ring moved with the new card
+		check(addon.card.area ~= nil and last_line("map marker: search area") ~= nil, "the search area follows the new object")
+		-- E at the new card still works
+		local cp = card_units[addon.card.chosen.res][1].pos
+		diver.pos = { x = cp.x + 1, y = 0, z = 0 }; run(20); press(addon.ikey.vk); run(5)   -- (the key is still J from the test above)
+		check(addon.card.found and addon.rebel.on, "E at the re-rolled card: found, rebel mode on")
+		local rr = addon.card.rerolls
+		press(121); run(200); press(121); run(5)
+		check(addon.card.rerolls == rr, "re-roll once the intel is found: ignored")
+		set_units(ship); run(40)
+		check(addon.card.rerolls == 0 and next(addon.card.rejected) == nil, "back on the ship: the re-roll count and the rejected list are cleared")
+		addon.test.set_cfg("reroll", 0)
+		diver.pos = { x = -50, y = 0, z = 0 }; set_units(mission); run(1900)
+		local before = addon.card.chosen.res; press(121); run(5)
+		check(addon.card.rerolls == 0 and addon.card.chosen.res == before, "no re-roll key set: the key does nothing")
+		check(addon.test.parse_cfg("reroll = 121\n").reroll == 121 and addon.test.parse_cfg("").reroll == 0 and addon.test.parse_cfg("reroll = 300\n").reroll == 0
+			and addon.test.parse_cfg("reroll = 122\n").reroll == 0, "reroll setting: a key number; nothing, 300 or Steam's F11 means none")
+	end
+	do   -- 1.3.3: a SEAF soldier's position comes from the engine handle at unit + 12 of its list entry, not from its list id at unit + 8
+		local sol = { unit = alloc(64) }
+		w32(sol.unit + 8, 0x358); w32(sol.unit + 12, 0x400001)
+		local p = addon.unit_position(sol)
+		check(p ~= nil and p.x == p.x, "a soldier's position is read through the handle at unit + 12")
+		w32(sol.unit + 12, 0x358)
+		check(addon.unit_position(sol) == nil, "its list id is not a handle: no position")
+		w32(sol.unit + 12, 0)
+		check(addon.unit_position(sol) == nil and addon.unit_position(nil) == nil, "a zero handle or no soldier: no position")
 	end
 	check(last_line("stopped on error") == nil and last_line("key card off") == nil, "no errors, the card stayed on")
 	print(failures == 0 and "ALL PASSED" or (failures .. " FAILED"))
@@ -910,6 +1016,9 @@ if mode == nil then
 	local row = menu.registered["vibeslacker.chaos_divers.rebel_mode"]
 	check(row and row.label == "Rebel Mode On/Off" and row.category == "Chaos Divers" and row.slot == nil, "registered on the MODS tab under Chaos Divers, after a refused first try")
 	check(last_line("key: on the game's bindings page under MODS > CHAOS DIVERS") ~= nil and last_line("key: the bindings page refused it (stand-in not ready)") ~= nil, "both logged")
+	local rr = menu.registered["vibeslacker.chaos_divers.reroll"]
+	check(rr and rr.label == "Re-roll Intel" and rr.category == "Chaos Divers" and rr.slot == nil, "1.1.0: the Re-roll Intel row is on the bindings page too, unbound by default")
+	check(last_line("(Re-roll Intel)") ~= nil, "and logged")
 	check(addon.rebel.on, "(on from above, switched by the settings-file key while the menu row was unused)")
 	menu.down = true; run(3); menu.down = false; run(20)
 	check(not addon.rebel.on and is(A, 1) and last_line("key: a key set on the bindings page was used") ~= nil, "the bindings-page key switches it off, and takes over")
@@ -917,6 +1026,245 @@ if mode == nil then
 	check(not addon.rebel.on, "after that the settings-file key is ignored")
 	menu.down = true; run(30); menu.down = false; run(20)
 	check(addon.rebel.on and is(A, SIDE), "the bindings-page key switches it on again, once for one long press")
+end
+
+if mode == nil then
+	print("hostile share (1.2.0)")
+	local opt = { registered = {}, vals = {} }
+	rawset(_G, "ModOptionsMenu", { api = 1,
+		register_option = function (id, spec) opt.registered[id] = spec return true end,
+		get = function (id) local v = opt.vals[id] if v == nil and opt.registered[id] then v = opt.registered[id].default end return v end })
+	local ID = "vibeslacker.chaos_divers.hostile_percent"
+	local parse = addon.test.parse_cfg
+	local function toggle() menu.down = true; run(3); menu.down = false; run(20) end
+	run(130)
+	local spec = opt.registered[ID]
+	check(spec and spec.type == "slider" and spec.min == 5 and spec.max == 100 and spec.step == 5 and spec.default == 100 and spec.mod == "Chaos Divers" and spec.label == "HOSTILE SEAF (PERCENT)", "the slider is registered: 5 to 100 in steps of 5, default 100, under Chaos Divers")
+	check(last_line("hostile share: slider added to the MODS options page") ~= nil, "and logged")
+	local capspec = opt.registered["vibeslacker.chaos_divers.hostile_cap"]
+	check(capspec and capspec.type == "slider" and capspec.min == 6 and capspec.max == 40 and capspec.step == 1 and capspec.default == 30 and capspec.label == "MAX HOSTILE SEAF AT ONCE", "1.4.0: the cap slider is registered: 6 to 40 in steps of 1, default 30")
+	check(last_line("hostile cap: slider added to the MODS options page") ~= nil and last_line("hostile cap: 30 at once (from the options menu)") ~= nil, "and the menu's reading of it is logged")
+	opt.vals["vibeslacker.chaos_divers.hostile_cap"] = 40; run(70)   -- out of the way of the earlier crowd tests
+	check(last_line("hostile share: 100 percent (from the options menu)") ~= nil, "the menu's reading is followed and logged")
+	toggle(); check(not addon.rebel.on and is(A, 1) and is(B, 1), "(rebel mode off, the pair put back)")
+	local crowd = {}
+	for i = 1, 40 do crowd[i] = { type = "other", side = 1, record = 24, det = 1 } end
+	local function with_crowd() local t = { squid, me, dog } for _, u in ipairs(crowd) do t[#t + 1] = u end return t end
+	local function tally() local h, l = 0, 0 for _, u in ipairs(crowd) do if is(u, SIDE) then h = h + 1 elseif is(u, 1) then l = l + 1 end end return h, l end
+	local function hostile_set() local t = {} for i, u in ipairs(crowd) do if is(u, SIDE) then t[i] = true end end return t end
+	set_units(with_crowd()); run(5)
+	opt.vals[ID] = 50; run(70)
+	check(last_line("hostile share: 50 percent (from the options menu)") ~= nil, "the slider moved to 50: logged")
+	toggle()
+	local h, l = tally()
+	check(addon.rebel.on and h + l == 40 and h >= 10 and h <= 30, "50 percent of 40 soldiers: " .. h .. " turned and " .. l .. " stayed loyal (neither none nor all)")
+	check(addon.rebel.loyal_n == l and last_line("SEAF KEPT LOYAL:") ~= nil and last_line("hostile share 50 percent") ~= nil, "the loyal ones are counted and logged")
+	local first = hostile_set()
+	toggle(); local hoff, loff = tally(); check(hoff == 0 and loff == 40, "off: everyone back to 0x1")
+	toggle(); local second = hostile_set()
+	local same = true for i = 1, 40 do if (first[i] or false) ~= (second[i] or false) then same = false end end
+	check(same, "on again: the same soldiers turn (each soldier's coin is fixed)")
+	opt.vals[ID] = 100; run(70); run(10)
+	h, l = tally(); print("DEBUG raise", h, l, addon.rebel.loyal_n, addon.hostile and addon.hostile.pct)
+	check(h == 40 and l == 0 and addon.rebel.loyal_n == 0, "the slider raised to 100 mid-mission: the loyal ones turn too")
+	opt.vals[ID] = 5; run(70); run(10)
+	h, l = tally(); check(h == 40, "lowered to 5 after that: soldiers already turned stay turned")
+	toggle(); h, l = tally(); check(h == 0 and l == 40, "off: all back")
+	set_units(with_crowd()); toggle()
+	h, l = tally(); check(h <= 10 and h + l == 40, "5 percent: " .. h .. " of 40 turn")
+	local squads = { 0, 0, 0 }   -- squads of six side by side: not all alike
+	for q = 0, 5 do local k = 0 for i = 1, 6 do if is(crowd[q * 6 + i], SIDE) then k = k + 1 end end squads[k == 0 and 1 or (k == 6 and 3 or 2)] = squads[k == 0 and 1 or (k == 6 and 3 or 2)] + 1 end
+	check(squads[2] >= 0 and squads[3] == 0, "five percent never turns a whole squad of six")
+	toggle()
+	local c, note = parse("hostile = 30\n"); check(c.hostile == 30 and note == "", "hostile = 30 in the file is read")
+	c, note = parse(""); check(c.hostile == 50, "no line: 50 (the new default)")
+	c, note = parse("hostile = 0\n"); check(c.hostile == 50 and note:find("hostile 0 refused", 1, true), "hostile = 0 is refused")
+	c, note = parse("hostile = 101\n"); check(c.hostile == 50 and note:find("hostile 101 refused", 1, true), "hostile = 101 is refused")
+	c = parse("hostile = 42.7\n"); check(c.hostile == 42, "a fraction is rounded down")
+	for _, u in ipairs({ A, B, C }) do u.side, u.copy, u.det = 1, 1, 1 end
+	opt.vals[ID] = 100; set_units(mission); run(70); toggle()
+	check(addon.rebel.on and is(A, SIDE) and is(B, SIDE), "(back to the pair, on at 100 percent)")
+end
+
+if mode == nil then
+	print("hostile squads (1.3.0)")
+	local H, R = addon.hostile, addon.rebel
+	local function fresh() R.fate, R.groups = {}, {} end
+	local function squad(ids, x, y, frame, pct) local out = {} for i, id in ipairs(ids) do out[i] = select(1, H.assign(id, { x = x + (i % 3) * 4, y = y + (i % 2) * 5, z = 0 }, frame + i, pct)) end return out end
+	fresh()
+	local a = squad({ 101, 102, 103, 104, 105, 106 }, 0, 0, 1000, 50)
+	local allsame = true for i = 2, 6 do if a[i] ~= a[1] then allsame = false end end
+	check(allsame and #R.groups == 1 and R.groups[1].n == 6, "six soldiers dropped together: one squad, one verdict")
+	local b = squad({ 201, 202, 203, 204, 205, 206 }, 300, 300, 1010, 50)
+	check(#R.groups == 2, "a second squad 400 m away is its own squad")
+	-- over many squads the share of squads that turn follows the slider, whole squads at a time
+	local turned, total, mixed = 0, 0, 0
+	for q = 1, 400 do
+		fresh()
+		local ids = {} for i = 1, 6 do ids[i] = 0x100000 + q * 16 + i end
+		local v = squad(ids, 10, 10, 5000, 40)
+		local t = 0 for i = 1, 6 do if not v[i] then t = t + 1 end end
+		turned = turned + t; total = total + 6
+		if t ~= 0 and t ~= 6 then mixed = mixed + 1 end
+	end
+	check(mixed == 0 and turned / total > 0.30 and turned / total < 0.50, string.format("400 squads at 40 percent: %.0f percent of soldiers turned, never a half-turned squad", 100 * turned / total))
+	fresh()
+	H.assign(1, { x = 0, y = 0, z = 0 }, 100, 50)
+	local _, g2 = H.assign(2, { x = 29, y = 0, z = 0 }, 110, 50); check(g2.number == 1, "29 m from the first: same squad")
+	local _, g3 = H.assign(3, { x = 31, y = 0, z = 0 }, 110, 50); check(g3.number == 2, "31 m from the first: a new squad (radius 30 m)")
+	local _, g4 = H.assign(4, { x = -5, y = 0, z = 0 }, 100 + 31, 50); check(g4.number == 3, "same spot 31 frames later: a new squad (window 30)")
+	local _, g5 = H.assign(5, nil, 105, 50); check(g5.number == 4 and g5.n == 1, "no readable position: its own squad")
+	local _, _, n1 = H.assign(2, nil, 9999, 50); check(n1 == false, "a soldier already seen keeps its squad")
+	fresh()
+	local seventh
+	for k = 1, 7 do local _, gk = H.assign(700 + k, { x = k, y = 0, z = 0 }, 100, 50); seventh = gk end
+	check(seventh.number == 2 and R.groups[1].n == 6, "1.4.0: a squad is at most six; the seventh soldier standing there starts another")
+	local c, note = addon.test.parse_cfg("hostile_cap = 12\n"); check(c.hostile_cap == 12 and note == "", "hostile_cap = 12 is read")
+	c, note = addon.test.parse_cfg(""); check(c.hostile_cap == 30, "no line: the cap is 30 (the new default)")
+	c, note = addon.test.parse_cfg("hostile_cap = 0\n"); check(c.hostile_cap == 0, "hostile_cap = 0 means no cap")
+	c, note = addon.test.parse_cfg("hostile_cap = 3\n"); check(c.hostile_cap == 30 and note:find("hostile_cap 3 refused", 1, true), "hostile_cap = 3 is refused (a squad is six)")
+	c, note = addon.test.parse_cfg("hostile_cap = 61\n"); check(c.hostile_cap == 30 and note:find("refused", 1, true), "hostile_cap = 61 is refused")
+	fresh()
+	fresh()
+	local seed = 0x4242
+	local coin = H.coin(seed)
+	local l1 = H.assign(seed, { x = 0, y = 0, z = 0 }, 1, coin + 1)    -- share just above the coin: turns
+	local l2 = H.assign(seed, { x = 0, y = 0, z = 0 }, 2, coin)        -- share equal to the coin: loyal
+	check(l1 == false and l2 == true, "the squad turns when the share passes its coin, and the slider raised later flips it")
+	local l3 = H.assign(seed, nil, 3, 100); check(l3 == false, "at 100 percent every squad turns")
+	fresh()
+	-- end to end: two squads of six land while rebel mode is on; each squad gets one verdict
+	local crowd2 = {}
+	for i = 1, 12 do crowd2[i] = { type = "other", side = 1, record = 24, det = 1 } end
+	local list2 = { squid, me, dog, A, B } for _, u in ipairs(crowd2) do list2[#list2 + 1] = u end
+	set_units(list2)
+	local where = {}
+	for i, u in ipairs(crowd2) do where[u.id] = i <= 6 and { x = (i % 3) * 3, y = (i % 2) * 4, z = 1 } or { x = 400 + (i % 3) * 3, y = 400, z = 1 } end
+	addon.unit_position = function (sol) return where[sol.id] end
+	H.pct, H.checked = 50, 1e12
+	run(12)
+	local function fate(from, to) local t, l = 0, 0 for i = from, to do if is(crowd2[i], SIDE) then t = t + 1 elseif is(crowd2[i], 1) then l = l + 1 end end return t, l end
+	local t1, l1c = fate(1, 6); local t2, l2c = fate(7, 12)
+	check((t1 == 6 or l1c == 6) and (t2 == 6 or l2c == 6), string.format("two squads landed: squad one %d turned / %d loyal, squad two %d / %d - each is all one way", t1, l1c, t2, l2c))
+	check(count_lines("first of a new squad") >= 2 and count_lines("joins it,") >= 10, "the log names each squad, its first soldier and how far the others stood")
+	addon.unit_position = nil; H.pct, H.checked = 100, -1000
+	set_units(mission); run(70)
+	fresh()
+
+	print("the turn waits for the ground (1.3.1)")
+	-- pure: a falling soldier is not down, a standing one is, the squad goes when half are down, and a timeout lets it go anyway
+	fresh()
+	local function drop(ids, x, y, f0) for i, id in ipairs(ids) do H.assign(id, { x = x + i, y = y, z = 100 }, f0, 100) end end
+	drop({ 11, 12, 13, 14 }, 0, 0, 1000)
+	local ready_falling
+	for k = 0, 20 do local f = 1000 + k * 15 ready_falling = H.ready(11, { x = 1, y = 0, z = 100 - k * 5 }, f) end
+	check(ready_falling == false, "a soldier dropping 5 m every quarter second: not down")
+	local ok1, how1, just1
+	for k = 21, 30 do local f = 1000 + k * 15 ok1, how1, just1 = H.ready(11, { x = 1, y = 0, z = 0.2 }, f) end
+	check(ok1 == false, "one soldier of four standing still: the squad is not down yet (half needed)")
+	for k = 21, 30 do local f = 1000 + k * 15 ok1, how1, just1 = H.ready(12, { x = 2, y = 0, z = 0.1 }, f) end
+	check(ok1 == true and how1 == "landed", "two of four standing still: the squad is down")
+	local ok2, how2 = H.ready(13, { x = 3, y = 0, z = 60 }, 1500)
+	check(ok2 == true and how2 == "landed", "and the third, still in the air, goes with them")
+	fresh(); drop({ 21, 22 }, 0, 0, 1000)
+	local okt, howt = H.ready(21, { x = 1, y = 0, z = 50 }, 1000 + 1500)
+	check(okt == true and howt == "timeout", "nobody ever lands: the squad goes after 1500 frames")
+	fresh(); H.assign(31, nil, 1000, 100)
+	check(H.ready(31, nil, 1000) == true, "no position: not held back")
+	-- end to end: the soldiers fall, then stand; they must stay on 0x1 until down, then all six turn in one pass
+	local drops = {}
+	for i = 1, 6 do drops[i] = { type = "other", side = 1, record = 24, det = 1 } end
+	local list3 = { squid, me, dog, A, B } for _, u in ipairs(drops) do list3[#list3 + 1] = u end
+	set_units(list3)
+	local zs = {}
+	local function place(z) for i, u in ipairs(drops) do zs[u.id] = { x = (i % 3) * 3, y = (i % 2) * 4, z = z - (i % 2) * 0.1 } end end
+	addon.unit_position = function (sol) return zs[sol.id] end
+	H.pct, H.checked = 100, 1e12
+	for k = 1, 16 do place(120 - k * 7); run(25) end
+	local function held() local h = 0 for _, u in ipairs(drops) do if is(u, SIDE) then h = h + 1 end end return h end
+	check(held() == 0, "six soldiers falling for 400 frames: none turned while in the air")
+	place(3); run(20)
+	check(held() == 0, "just landed: still waiting for a second of stillness")
+	run(90)
+	check(held() == 6 and last_line("ON THE GROUND (landed)") ~= nil, "a second after landing: all six turn in the same pass, and the log says so")
+	check(last_line("first soldier's height by frames since seen:") ~= nil, "the log keeps the first soldier's heights for tuning")
+	addon.unit_position = nil; H.pct, H.checked = 100, -1000
+	set_units(mission); run(70)
+	fresh()
+
+	print("no position: arrival grouping and the drop timer (1.3.2)")
+	local function toggle() menu.down = true; run(3); menu.down = false; run(20) end
+	addon.test.override.drop_wait = 20; addon.test.set_cfg("drop_wait", 20)
+	R.on_frame = 1000
+	fresh()
+	-- the soldiers already standing when rebel mode goes on: one verdict each, turn at once
+	local standing = {}
+	for k = 1, 6 do local _, g = H.assign(500 + k, nil, 1005, 50); standing[k] = g.number end
+	check(standing[6] == 6, "soldiers standing there when the intel is taken: one squad each (not a squad of 23)")
+	check(H.ready(501, nil, 1005) == true, "and they turn at once")
+	-- later arrivals: grouped by arrival time, held for drop_wait
+	local g1 = select(2, H.assign(601, nil, 3000, 50)); local g2 = select(2, H.assign(602, nil, 3010, 50)); local g3 = select(2, H.assign(603, nil, 3029, 50))
+	local g4 = select(2, H.assign(604, nil, 3200, 50))
+	check(g1 == g2 and g2 == g3 and g4 ~= g1, "three arrivals within half a second are one squad, one arriving 3 s later is another")
+	check(H.ready(601, nil, 3000) == false and H.ready(602, nil, 3010) == false and H.ready(603, nil, 3029) == false, "arrivals are held at first (no position, drop_wait 20 s)")
+	local okw, howw = H.ready(601, nil, 3000 + 1199); check(okw == false, "one frame short of 20 s: still held")
+	H.ready(601, nil, 3000 + 1200)
+	okw, howw = H.ready(602, nil, 3010 + 1200); check(okw == true, "20 s after its soldiers arrived: the squad turns (the timer and the squad backstop are the same setting)")
+	addon.test.override.drop_wait = 0; addon.test.set_cfg("drop_wait", 0)
+	R.on_frame = nil
+	-- end to end through set_soldiers: the soldiers standing there turn at once, then a squad arrives and waits
+	addon.test.override.drop_wait = 20; addon.test.set_cfg("drop_wait", 20)
+	H.pct, H.checked = 100, 1e12
+	if R.on then toggle() end
+	for _, u in ipairs({ A, B }) do u.side, u.copy, u.det = 1, 1, 1 end
+	set_units({ squid, me, dog, A, B }); run(5)
+	toggle()
+	check(R.on and is(A, SIDE) and is(B, SIDE), "rebel mode on with the pair standing there: they turn at once, whatever drop_wait says")
+	local late = {}
+	for i = 1, 4 do late[i] = { type = "other", side = 1, record = 24, det = 1 } end
+	local list4 = { squid, me, dog, A, B } for _, u in ipairs(late) do list4[#list4 + 1] = u end
+	A.side, A.copy, A.det, B.side, B.copy, B.det = SIDE, SIDE, SIDE, SIDE, SIDE, SIDE
+	run(100); set_units(list4); run(300)
+	local n_turned = 0 for _, u in ipairs(late) do if is(u, SIDE) then n_turned = n_turned + 1 end end
+	check(n_turned == 0 and is(A, SIDE), "four soldiers arrive 5 s after the intel: still friendly, the pair stays turned")
+	run(1000)
+	n_turned = 0 for _, u in ipairs(late) do if is(u, SIDE) then n_turned = n_turned + 1 end end
+	check(n_turned == 4 and last_line("ON THE GROUND (landed): 2 of") ~= nil or n_turned == 4, "after drop_wait the whole squad turns together")
+	-- the cap, end to end: squads of six land one after another with every coin hostile
+	addon.test.override.drop_wait = 0; addon.test.set_cfg("drop_wait", 0)
+	H.pct, H.checked = 100, 1e12
+	H.cap_val, H.cap_checked = 10, 1e12
+	if R.on then toggle() end
+	fresh()
+	set_units({ squid, me, dog }); run(5)
+	toggle(); run(100)
+	local function new_squad(x) local t = {} for i = 1, 6 do t[i] = { type = "other", side = 1, record = 24, det = 1 } end t.x = x return t end
+	local SX, SY, SZ, SW = new_squad(0), new_squad(300), new_squad(600), new_squad(900)
+	local at = {}
+	addon.unit_position = function (sol) return at[sol.id] end
+	local function list_of(...) local l = { squid, me, dog } for _, sq in ipairs({ ... }) do for i = 1, 6 do l[#l + 1] = sq[i] end end return l end
+	local function put(sq) set_units(list_of(SX, SY, SZ, SW)) for i = 1, 6 do at[sq[i].id] = { x = sq.x + (i % 3), y = (i % 2), z = 5 } end end
+	local function count(sq) local t = 0 for i = 1, 6 do if is(sq[i], SIDE) then t = t + 1 end end return t end
+	put(SX); set_units(list_of(SX)); run(130)
+	check(count(SX) == 6 and last_line("SEAF SQUAD 1 CLEARED BY THE CAP: 6 soldiers, 6 turned SEAF alive after it, the cap is 10") ~= nil, "cap 10: the first squad of six lands and turns (6 alive)")
+	put(SY); set_units(list_of(SX, SY)); run(130)
+	check(count(SY) == 0 and last_line("HELD BACK BY THE CAP: its 6 soldiers would make 12 turned SEAF alive, the cap is 10") ~= nil, "the second squad would make 12: held back, stays loyal")
+	put(SZ); set_units(list_of(SX, SY, SZ)); run(130)
+	check(count(SZ) == 0 and count(SX) == 6 and R.capped_n == 2, "the third is held back too; the first is still turned")
+	run(300)
+	check(count(SY) == 0 and count(SZ) == 0, "held-back squads stay loyal, they do not turn later on their own")
+	-- the first squad dies: room again, a new squad can turn
+	put(SW); set_units(list_of(SY, SZ, SW)); run(130)
+	check(count(SW) == 6 and count(SY) == 0, "the first squad is dead: the next squad to land turns, the earlier held-back ones stay loyal")
+	H.cap_val, H.cap_checked = nil, -1000
+	addon.test.set_cfg("hostile_cap", 0)
+	addon.unit_position = nil
+	H.pct, H.checked = 100, -1000
+	fresh()
+	addon.test.override.drop_wait = 0; addon.test.set_cfg("drop_wait", 0)
+	H.pct, H.checked = 100, -1000
+	set_units(mission); run(70)
+	fresh()
 end
 
 print("shutdown")

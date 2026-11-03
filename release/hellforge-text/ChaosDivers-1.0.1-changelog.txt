@@ -1,0 +1,1 @@
+1.0.1: The intel now uses your game's own interact key instead of a fixed E, so players who rebound it can take the intel. If the game's key can't be read, it falls back to E.

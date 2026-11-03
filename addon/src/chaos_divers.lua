@@ -127,6 +127,50 @@
 --       values as this machine sees them (and when they change), and every change in the lore objects' and the
 --       Helldivers' interaction state blocks. One log from each machine in a two-player mission shows whether the host
 --       can see a squadmate's E and whether a squadmate's game can see the host's flip. Nothing else changed.
+-- 1.1.0: the intel pick (Wilson 2026-11-01: "i dont want the intel right on top the divers. there needs to be some challenge in
+--       reaching it", and unreachable spots happen). (1) The pick is taken from a distance band, 60 to 250 m, around a shared
+--       anchor (the centroid of all Helldivers, rounded to 50 m, so every copy agrees); hash-picked inside the band; nothing in the
+--       band: the nearest object beyond it (else the farthest closer one). (2) A re-roll key (setting reroll = a key number, or a key
+--       set on the bindings page under MODS > CHAOS DIVERS > Re-roll Intel; unbound by default) throws the current intel away and picks
+--       another, never one already rejected, counter-seeded so every copy that presses it lands on the same next object. (3) The pick
+--       logs the anchor, the diver's height and each lore object's distance from the anchor and height against the diver.
+-- 1.2.0: a share of the SEAF turn, not all of them (Wilson 2026-11-02: "allows players to adjust the percent of hostile soldiers so they
+--       dont feel completely overwhelmed ... if a squad drops and 2 are hostile so be it. i want a little chaos and the fog of war").
+--       A slider on the MODS options page (Mod Options Menu: HOSTILE SEAF, 5 to 100 percent in steps of 5) or the setting hostile = 1 to 100
+--       in the file (the menu wins while it is there). Every soldier gets its own fixed coin flip from a hash of its unit id, so it is
+--       decided once and stays that way, a squad can come out all loyal or all hostile, and every copy agrees. Default 100 = every
+--       soldier turns, as in 1.1.0 and before. Raising the share mid-mission turns more of the loyal ones; lowering it only
+--       affects soldiers not yet decided. Loyal soldiers stay on the Helldivers' side and shoot the turned ones.
+-- 1.3.0: the coin is thrown per SQUAD, not per soldier (Wilson 2026-11-02: "see if you can spawn hostile seaf together not randomly").
+--       A soldier seen for the first time joins the group of an earlier new soldier that was first seen within 300 frames (5 s) and
+--       within 30 m of it (flat), else it starts a group; the group's seed soldier's hash is the group's coin, and the whole group
+--       turns or stays loyal together. A soldier whose position cannot be read is its own group (the 1.2.0 behaviour). The log names
+--       each group, where its first soldier stood, and how far each later one was, so the radius and window can be tuned from a run.
+-- 1.3.1: the turn waits for the ground (Wilson 2026-11-02: "squad not mixed on the drop ship ... or coin flip hit after they hit the
+--       ground. friendly seaf are shooting the drop ships on their way down. kinda gives it away"). The squad's coin is still thrown at the
+--       first sighting, but a squad that is to turn is only written once it has landed: at least half its soldiers have kept their
+--       height within 0.6 m for the last second (a falling soldier moves metres a second), or 25 s have passed, and then every member
+--       turns in the same pass. A soldier whose position cannot be read is not held back. The log shows the first soldier's height
+--       samples at that moment (SEAF SQUAD n ON THE GROUND) so the thresholds can be tuned from a real drop.
+-- 1.3.2: the 19:29 run of 1.3.1 logged "position unreadable" for every soldier: the faction list's soldier id (0x358, 0x416, ...) is a
+--       detector id, not the engine's unit handle the unit table is keyed by, so no squad was ever grouped and nothing was held back
+--       (the drop ships were shot as before). Until the real handle is found: (1) a timer fallback, drop_wait seconds (setting, default 20,
+--       0 = off): a soldier whose position cannot be read, first seen AFTER rebel mode went on, is held that long before its squad can
+--       turn (the soldiers already standing there when the intel is taken turn at once, as before); (2) a position probe: for the first 8
+--       soldiers of a mission the log shows the unit struct's first 16 words and any word that the unit table turns into a position.
+-- 1.3.3: the 19:52 run of 1.3.2 (POSITION PROBE lines) found the soldier's real handle: the 4th word of its unit struct (unit + 12) is the
+--       key the unit table wants (e.g. 0x3C2D -> a position), the list id at unit + 8 never was. Soldiers now have positions, so squads
+--       are grouped by place (30 m) and time (now 30 frames, the squads arrived as sixes within 5 frames and 80 frames apart) and a squad
+--       turns when half of it has landed (height steady within 0.6 m for a second); the drop_wait timer is only the fallback for a
+--       soldier whose position cannot be read. Soldiers already standing when the intel is taken still turn at once.
+-- 1.4.0: a cap on how many turned SEAF can be alive at once (Wilson 2026-11-02: "build the cap at 10", after a run where 35 of 47 SEAF
+--       turned at a 50 percent share and he kept dying). A slider MAX HOSTILE SEAF AT ONCE (6 to 40, default 10) on the MODS options page,
+--       or hostile_cap in the settings file (0 = no cap, else 6 to 60; the slider wins when it is there). When a squad is ready to turn
+--       (landed, or the standing soldiers at the switch-on) the turned SEAF still alive are counted; if the whole squad would take the
+--       count past the cap it stays loyal for good (no partial squads), else it turns. Squads are now at most 6 soldiers (the drops come
+--       as sixes), so a crowd standing together is several squads, not one. The log says which squads the cap held back.
+-- 1.4.1: new defaults (Wilson 2026-11-02: "set defaults to 50 and 30"): hostile share 50 percent, cap 30. Players who already moved a slider keep
+--       what they set (the options menu stores it); the defaults reach new installs and the settings file.
 -- Settings: Logs/ChaosDivers.cfg (key, side, guard, guard_at, squad, banner; read again at every key press)
 -- Log: Logs/ChaosDivers.log (in the CowboyBingus log folder); the last session's
 --      is kept as ChaosDivers.previous.log.
@@ -147,7 +191,7 @@
 --   mission state   -> one object; the game reads the kill count as
 --                      [game.dll slot] + 0x2FC84
 if rawget(_G, "ChaosDivers") then return true end
-local REVISION = "Chaos Divers: Dissidents Among Us 1.0.1"
+local REVISION = "Chaos Divers: Dissidents Among Us 1.1.0"
 local state = { revision = REVISION, frames = 0, status = "starting" }
 rawset(_G, "ChaosDivers", state)
 
@@ -258,56 +302,116 @@ end
 -- The key on the game's bindings page, through Mod Bindings Menu (optional). Registration is retried once a
 -- 60 frames (about a second) for 60 tries, since addons load in no fixed order. is_down is a level; the edge is worked out here.
 local MENU_ID, MENU_LABEL, MENU_CATEGORY = "vibeslacker.chaos_divers.rebel_mode", "Rebel Mode On/Off", "Chaos Divers"
-local menu_key = { registered = false, tries = 0, next_try = 0, was = nil, taken = false, last = nil, file_frame = -1000 }
+state.menu_main = { registered = false, tries = 0, next_try = 0, was = nil, taken = false, last = nil, file_frame = -1000 }
+state.menu_reroll = { registered = false, tries = 0, next_try = 0, was = nil, taken = false, last = nil, file_frame = -1000 }
 local function bindings_menu()
 	local m = rawget(_G, "ModBindingsMenu")
 	if type(m) ~= "table" or rawget(m, "api") ~= 1 or type(rawget(m, "version")) ~= "number" or m.version < 2 then return nil end
 	return m
 end
-local function menu_pressed(frame)
+local function menu_pressed(frame, mk, id, label)
+	mk, id, label = mk or state.menu_main, id or MENU_ID, label or MENU_LABEL
 	local m = bindings_menu()
 	if not m then return false end
-	if not menu_key.registered then
-		if menu_key.tries >= 60 or frame < menu_key.next_try then return false end
-		menu_key.next_try, menu_key.tries = frame + 60, menu_key.tries + 1
-		local ok, done, why = pcall(m.register_binding, MENU_ID, MENU_LABEL, nil, { category = MENU_CATEGORY })
+	if not mk.registered then
+		if mk.tries >= 60 or frame < mk.next_try then return false end
+		mk.next_try, mk.tries = frame + 60, mk.tries + 1
+		local ok, done, why = pcall(m.register_binding, id, label, nil, { category = MENU_CATEGORY })
 		if ok and done == true then
-			menu_key.registered = true
-			log("key: on the game's bindings page under MODS > CHAOS DIVERS (" .. MENU_LABEL .. "); the settings-file key counts until a key set there is used")
+			mk.registered = true
+			log("key: on the game's bindings page under MODS > CHAOS DIVERS (" .. label .. "); the settings-file key counts until a key set there is used")
 		else
 			local note = "key: the bindings page refused it (" .. tostring(ok and why or done) .. "); the settings-file key is used"
-			if note ~= menu_key.last then menu_key.last = note; log(note) end
+			if note ~= mk.last then mk.last = note; log(note) end
 		end
 		return false
 	end
-	local ok, down = pcall(m.is_down, MENU_ID)
-	if not ok or down == nil then menu_key.was = nil return false end
-	local was = menu_key.was
-	menu_key.was = down == true
+	local ok, down = pcall(m.is_down, id)
+	if not ok or down == nil then mk.was = nil return false end
+	local was = mk.was
+	mk.was = down == true
 	return down == true and was == false and game_focused()
 end
 
 -- This frame's on/off press, from the bindings page or the settings-file key.
-local function key_pressed(frame, vk)
-	if vk == 0 then return false end   -- 0.30: no manual key by default (Wilson); the intel is the only way in
-	local from_menu, from_file = menu_pressed(frame), pressed(vk)
-	if from_file then menu_key.file_frame = frame end
-	if from_menu and not menu_key.taken then
-		menu_key.taken = true
+local function key_pressed(frame, vk, mk, id, label, always_menu)
+	mk = mk or state.menu_main
+	if vk == 0 and not always_menu then return false end   -- 0.30: no manual key by default (Wilson); the intel is the only way in
+	local from_menu, from_file = menu_pressed(frame, mk, id, label), vk ~= 0 and pressed(vk)
+	if from_file then mk.file_frame = frame end
+	if from_menu and not mk.taken then
+		mk.taken = true
 		log("key: a key set on the bindings page was used; only it counts from now on (the settings-file key is ignored until the game restarts)")
 		-- the same key set in both places, seen a few frames apart: one press, not two
-		if frame - menu_key.file_frame <= 10 then return false end
+		if frame - mk.file_frame <= 10 then return false end
 	end
-	return from_menu or (from_file and not menu_key.taken)
+	return from_menu or (from_file and not mk.taken)
 end
 
 -- ------------------------------------------------------------------ settings
 local CFG = DIR .. "ChaosDivers.cfg"
-local DEFAULTS = { key = 0, side = 0, guard = 1, guard_at = 1, squad = 1, banner = 1, card = 1, interact = 0, marker = 1, probe = 0 }   -- interact 0 = follow the game's own interact key (1.0.1)
+local DEFAULTS = { key = 0, side = 0, guard = 1, guard_at = 1, squad = 1, banner = 1, card = 1, interact = 0, marker = 1, probe = 0, reroll = 0, hostile = 50, drop_wait = 7, hostile_cap = 30 }   -- interact 0 = follow the game's own interact key (1.0.1)
 local BAD_KEYS = { [117] = "F6 is the Passive Picker's", [118] = "F7 is the Reroller's", [122] = "F11 is Steam's", [123] = "F12 is Steam's" }
 local function defaults() local t = {} for k, v in pairs(DEFAULTS) do t[k] = v end return t end
 local cfg = defaults()
 local cfg_note = nil
+
+-- The hostile share (1.2.0): a slider through Mod Options Menu (optional, same route as Heavy SEAF Presence), else the setting. The menu
+-- is looked at once a second and registered with up to 60 tries, since addons load in no fixed order. 0 never reaches here: the
+-- slider starts at 5 (the menu treats a slider reading 0 as unset).
+state.hostile = { id = "vibeslacker.chaos_divers.hostile_percent", registered = false, tries = 0, next_try = 0, checked = -1000, pct = nil, last = nil,
+	cap_id = "vibeslacker.chaos_divers.hostile_cap", cap_registered = false, cap_tries = 0, cap_next = 0, cap_checked = -1000, cap_val = nil, cap_last = nil }
+function state.hostile.poll(frame)
+	local h = state.hostile
+	local m = rawget(_G, "ModOptionsMenu")
+	if type(m) == "table" and m.api == 1 and type(m.register_option) == "function" and type(m.get) == "function" then
+		if not h.registered and h.tries < 60 and frame >= h.next_try then
+			h.next_try, h.tries = frame + 60, h.tries + 1
+			local ok, accepted, why = pcall(m.register_option, h.id, { type = "slider", default = cfg.hostile, min = 5, max = 100, step = 5,
+				label = "HOSTILE SEAF (PERCENT)", mod = "Chaos Divers", mod_id = "vibeslacker.chaos_divers",
+				description = "When the dissidents' data is taken, this share of the SEAF soldiers turns hostile. Each soldier is decided on its own, so a squad can come out all loyal, all hostile or mixed. 100 = all of them." })
+			if ok and accepted == true then
+				h.registered = true
+				log("hostile share: slider added to the MODS options page (HOSTILE SEAF, 5 to 100 percent)")
+			else
+				local note = "hostile share: the options menu refused the slider (" .. tostring(ok and why or accepted) .. "); the settings file's hostile = " .. cfg.hostile .. " is used"
+				if note ~= h.last then h.last = note; log(note) end
+			end
+		end
+		if h.registered and frame - h.checked >= 60 then
+			h.checked = frame
+			local ok, v = pcall(m.get, h.id)
+			if ok and type(v) == "number" and v >= 1 and v <= 100 then
+				v = math.floor(v + 0.5)
+				if v ~= h.pct then h.pct = v; log("hostile share: " .. v .. " percent (from the options menu)") end
+			end
+		end
+		if not h.cap_registered and h.cap_tries < 60 and frame >= h.cap_next then
+			h.cap_next, h.cap_tries = frame + 60, h.cap_tries + 1
+			local dflt = (cfg.hostile_cap or 0) >= 6 and math.min(cfg.hostile_cap, 40) or 30
+			local ok, accepted, why = pcall(m.register_option, h.cap_id, { type = "slider", default = dflt, min = 6, max = 40, step = 1,
+				label = "MAX HOSTILE SEAF AT ONCE", mod = "Chaos Divers", mod_id = "vibeslacker.chaos_divers",
+				description = "The most turned SEAF that can be alive at the same time. A squad that would take the count past this stays loyal. Raise it for a harder fight." })
+			if ok and accepted == true then
+				h.cap_registered = true
+				log("hostile cap: slider added to the MODS options page (MAX HOSTILE SEAF AT ONCE, 6 to 40)")
+			else
+				local note = "hostile cap: the options menu refused the slider (" .. tostring(ok and why or accepted) .. "); the settings file's hostile_cap = " .. tostring(cfg.hostile_cap) .. " is used"
+				if note ~= h.cap_last then h.cap_last = note; log(note) end
+			end
+		end
+		if h.cap_registered and frame - h.cap_checked >= 60 then
+			h.cap_checked = frame
+			local ok, v = pcall(m.get, h.cap_id)
+			if ok and type(v) == "number" and v >= 6 and v <= 40 then
+				v = math.floor(v + 0.5)
+				if v ~= h.cap_val then h.cap_val = v; log("hostile cap: " .. v .. " at once (from the options menu)") end
+			end
+		end
+	end
+end
+function state.hostile.value(frame) state.hostile.poll(frame) return state.hostile.pct or cfg.hostile end
+function state.hostile.cap(frame) return state.hostile.cap_val or cfg.hostile_cap or 0 end
 local function parse_cfg(text)
 	local out, notes = defaults(), {}
 	for line in (text or ""):gmatch("[^\r\n]+") do
@@ -319,6 +423,12 @@ local function parse_cfg(text)
 			elseif n < 1 or n > 254 then notes[#notes + 1] = "key " .. value .. " is not a key number; using no key"
 			elseif BAD_KEYS[n] then notes[#notes + 1] = "key " .. n .. " refused (" .. BAD_KEYS[n] .. "); using no key"
 			else out.key = n end
+		elseif name == "reroll" and n then
+			n = math.floor(n)
+			if n == 0 then out.reroll = 0
+			elseif n < 1 or n > 254 then notes[#notes + 1] = "reroll " .. value .. " is not a key number; no re-roll key in the settings file"
+			elseif BAD_KEYS[n] then notes[#notes + 1] = "reroll " .. n .. " refused (" .. BAD_KEYS[n] .. "); no re-roll key in the settings file"
+			else out.reroll = n end
 		elseif name == "side" and n then
 			if n == 0 or n == 2 or n == 4 or n == 8 then out.side = n
 			else notes[#notes + 1] = "side " .. value .. " refused (only 0, 2, 4 or 8); using 0 (join the enemy on the map)" end
@@ -330,6 +440,18 @@ local function parse_cfg(text)
 		elseif (name == "guard" or name == "squad" or name == "banner" or name == "card" or name == "probe") and n then
 			if n == 0 or n == 1 then out[name] = n
 			else notes[#notes + 1] = name .. " " .. value .. " refused (only 0 or 1); using " .. DEFAULTS[name] end
+		elseif name == "hostile" and n then
+			n = math.floor(n)
+			if n >= 1 and n <= 100 then out.hostile = n
+			else notes[#notes + 1] = "hostile " .. value .. " refused (1 to 100); using 50" end
+		elseif name == "hostile_cap" and n then
+			n = math.floor(n)
+			if n == 0 or (n >= 6 and n <= 60) then out.hostile_cap = n
+			else notes[#notes + 1] = "hostile_cap " .. value .. " refused (0, or 6 to 60); using 30" end
+		elseif name == "drop_wait" and n then
+			n = math.floor(n)
+			if n >= 0 and n <= 120 then out.drop_wait = n
+			else notes[#notes + 1] = "drop_wait " .. value .. " refused (0 to 120); using 7" end
 		elseif name == "marker" and n then
 			if n == 0 or n == 1 or n == 2 or n == 3 then out.marker = n
 			else notes[#notes + 1] = "marker " .. value .. " refused (0 to 3); using 1" end
@@ -370,6 +492,19 @@ local function load_cfg()
 					"interact = 0\n",
 					"# marker: what the card's search area shows on the tactical map. 1 = ring and label, 2 = ring only, 3 = label only, 0 = nothing.\n",
 					"marker = 1\n",
+					"# reroll: a Windows key number (121 = F10) that throws the current intel away and picks another one, for when it cannot be reached.\n",
+					"#   0 = no key here (the default). The key can also be set on the game's bindings page under MODS > CHAOS DIVERS > Re-roll Intel.\n",
+					"reroll = 0\n",
+					"# hostile: the share of the SEAF soldiers that turn, in percent (1 to 100). Each soldier is decided on its own, so a squad can come out\n",
+					"#   all loyal, all hostile or mixed. 100 = every soldier turns (the default). With Mod Options Menu installed the slider on the\n",
+					"#   MODS page (HOSTILE SEAF) is used instead of this line.\n",
+					"hostile = 50\n",
+					"# drop_wait: the longest, in seconds, a SEAF squad that is to turn is held after it appears, so the loyal SEAF do not shoot it in the drop ship.\n",
+					"#   It turns sooner when the squad is seen on the ground. Soldiers already standing when the intel is taken turn at once. 0 = the old 25 seconds.\n",
+					"drop_wait = 7\n",
+					"# hostile_cap: the most turned SEAF alive at once (6 to 60). A squad that would take the count past it stays loyal. 0 = no cap.\n",
+					"#   With Mod Options Menu installed the slider MAX HOSTILE SEAF AT ONCE on the MODS page is used instead of this line.\n",
+					"hostile_cap = 30\n",
 					"# probe: 1 = log extra PROBE lines for co-op debugging. 0 = off (the default).\n",
 					"probe = 0\n")
 				w:close()
@@ -384,8 +519,9 @@ local function load_cfg()
 	local changed = false
 	for k in pairs(DEFAULTS) do if new[k] ~= cfg[k] then changed = true end end
 	if changed then
-		log(string.format("settings: key %d, side 0x%X, guard %d at %d, squad %d, banner %d, card %d, interact %d, marker %d", new.key, new.side, new.guard, new.guard_at, new.squad, new.banner, new.card, new.interact, new.marker))
+		log(string.format("settings: key %d, side 0x%X, guard %d at %d, squad %d, banner %d, card %d, interact %d, marker %d, reroll %d", new.key, new.side, new.guard, new.guard_at, new.squad, new.banner, new.card, new.interact, new.marker, new.reroll))
 	end
+	for k, v in pairs(state.test and state.test.override or {}) do new[k] = v end   -- the offline harness only
 	cfg = new
 end
 
@@ -816,7 +952,7 @@ local function banner_tick()
 end
 
 -- ------------------------------------------------------------------ rebel mode
-local rebel = { on = false, side = nil, set = 0, resets = 0, kept = 0, tally_resets = 0, tally_kept = 0 }
+local rebel = { on = false, side = nil, set = 0, resets = 0, kept = 0, tally_resets = 0, tally_kept = 0, loyal = {}, loyal_n = 0, fate = {}, groups = {}, trace = {}, probe_n = 0, capped_n = 0 }
 local guard_ok = false   -- set by the unit pass: in a mission (or between Helldivers), solo unless squad = 1
 state.rebel = rebel
 
@@ -857,6 +993,90 @@ local function fnv1(name)
 		if h < 0 then h = h + 4294967296 end
 	end
 	return h
+end
+
+-- Is this soldier one of the loyal ones at this share? Its own hash coin: the id plus a salt, so ids that sit next to each other
+-- (a squad) do not move together; the low byte is dropped because the last characters hashed only reach it.
+function state.hostile.coin(id) return math.floor(fnv1(string.format("%x;loyal squad coin", id)) / 256) % 100 end
+function state.hostile.loyal(id, pct)
+	if pct >= 100 then return false end
+	return state.hostile.coin(id) >= pct
+end
+
+-- 1.3.0: the squad. A soldier seen for the first time joins the group of an earlier new soldier first seen within `window` frames and
+-- `radius` metres (flat) of it, else it starts one; the group's seed soldier's coin is the group's, so the whole squad turns or stays loyal.
+-- No position: its own group. Returns loyal (bool), the group, whether the soldier was new, its flat distance to the group's seed, and
+-- the group's number. Lowering the share never un-turns anyone: the caller only asks about soldiers still on the home side.
+state.hostile.radius, state.hostile.window, state.hostile.max_squad = 30, 30, 6
+function state.hostile.assign(id, pos, frame, pct)
+	local g, new, d = rebel.fate[id], false, nil
+	if not g then
+		new = true
+		local timed = not pos and not (rebel.on_frame ~= nil and frame >= rebel.on_frame and frame - rebel.on_frame <= 30)   -- 1.3.2: no position and not standing there already: grouped by arrival time
+		if timed then
+			for _, c in ipairs(rebel.groups) do
+				if c.timed and c.n < state.hostile.max_squad and frame - c.frame <= state.hostile.window then g = c break end
+			end
+		end
+		if pos then
+			for _, c in ipairs(rebel.groups) do
+				if c.pos and c.n < state.hostile.max_squad and frame - c.frame <= state.hostile.window then
+					local dx, dy = c.pos.x - pos.x, c.pos.y - pos.y
+					d = math.sqrt(dx * dx + dy * dy)
+					if d <= state.hostile.radius then g = c break end
+				end
+			end
+		end
+		if not g then
+			g = { seed = id, pos = pos, frame = frame, coin = state.hostile.coin(id), n = 0, number = #rebel.groups + 1, timed = timed }
+			rebel.groups[#rebel.groups + 1] = g
+			d = nil
+		end
+		g.n = g.n + 1
+		rebel.fate[id] = g
+	end
+	return pct < 100 and g.coin >= pct, g, new, d
+end
+
+-- 1.3.1: has this soldier's squad reached the ground? A soldier is down when its height held within land_dz metres over the last
+-- ~1 s (4 samples a quarter of a second apart spanning 45 frames or more); the squad is down when half its soldiers are, or after
+-- land_timeout frames. No position = not held back. Returns ready, how it came to be ready ("landed" or "timeout"), and whether
+-- that happened just now.
+state.hostile.land_dz, state.hostile.land_timeout, state.hostile.sample_every = 0.6, 1500, 15
+function state.hostile.ready(id, pos, frame)
+	local g = rebel.fate[id]
+	if not g then return true end
+	if g.go then return true, g.go, false end
+	local down = true
+	local tr = rebel.trace[id]
+	if not tr then tr = { first = frame, zs = {}, initial = rebel.on_frame ~= nil and frame >= rebel.on_frame and frame - rebel.on_frame <= 30 } rebel.trace[id] = tr end
+	if tr.initial then
+		down = true   -- standing there when the intel was taken: turns at once
+	elseif not pos then
+		down = frame - tr.first >= (cfg.drop_wait or 7) * 60   -- 1.3.2: no position, so a timer
+	else
+		local last = tr.zs[#tr.zs]
+		if not last or frame - last.f >= state.hostile.sample_every then
+			tr.zs[#tr.zs + 1] = { f = frame, z = pos.z }
+			if #tr.zs > 12 then table.remove(tr.zs, 1) end
+		end
+		local lo, hi, n, oldest, newest = nil, nil, 0, nil, nil
+		for _, q in ipairs(tr.zs) do
+			if frame - q.f <= 75 then
+				n = n + 1
+				lo = lo and math.min(lo, q.z) or q.z; hi = hi and math.max(hi, q.z) or q.z
+				oldest = oldest or q.f; newest = q.f
+			end
+		end
+		down = n >= 4 and newest - oldest >= 45 and hi - lo < state.hostile.land_dz
+	end
+	if down then
+		g.landed = g.landed or {}
+		if not g.landed[id] then g.landed[id] = true; g.landed_n = (g.landed_n or 0) + 1 end
+	end
+	if (g.landed_n or 0) >= math.ceil(g.n / 2) then g.go = "landed"
+	elseif frame - g.frame >= ((cfg.drop_wait or 0) > 0 and cfg.drop_wait * 60 or state.hostile.land_timeout) then g.go = "timeout" end   -- drop_wait caps the wait (Wilson: 7 s); 0 = the old 25 s
+	return g.go ~= nil, g.go, g.go ~= nil
 end
 
 -- The engine's World value of the game's own Game World, or nil and why.
@@ -930,10 +1150,10 @@ end
 
 
 local function forget()
-	if rebel.set > 0 then log(string.format("rebel mode set %d SEAF soldiers while it was on", rebel.set)) end
+	if rebel.set > 0 or rebel.loyal_n > 0 then log(string.format("rebel mode set %d SEAF soldiers while it was on; %d were kept loyal by the hostile share (%d squads, %d held back by the cap)", rebel.set, rebel.loyal_n, #rebel.groups, rebel.capped_n)) end
 	if rebel.resets > 0 then log(string.format("count guard: %d resets while it was on, %d SEAF kills kept off the count", rebel.resets, rebel.kept)) end
 	if rebel.tally_resets > 0 then log(string.format("tally guard: %d resets while it was on, %d kills kept off the traitor tally", rebel.tally_resets, rebel.tally_kept)) end
-	rebel.on = false; rebel.side = nil; rebel.blind = nil; rebel.set = 0; rebel.said = nil
+	rebel.on = false; rebel.side = nil; rebel.blind = nil; rebel.set = 0; rebel.said = nil; rebel.loyal = {}; rebel.loyal_n = 0; rebel.fate = {}; rebel.groups = {}; rebel.trace = {}; rebel.probe_n = 0; rebel.capped_n = 0
 	rebel.resets = 0; rebel.kept = 0; rebel.tally_resets = 0; rebel.tally_kept = 0; rebel.guard_failed = nil; rebel.tally_failed = nil; guard_ok = false
 end
 local function say_once(what, text)
@@ -969,12 +1189,59 @@ local function set_soldiers(units)
 	local t, why = detector_table()
 	if not t then say_once("table", "rebel mode is on but the detector table cannot be read (" .. why .. "); soldiers are left alone until it can") return end
 	local side, n, types = rebel.side, 0, {}
+	local pct, kept_now = state.hostile.value(state.frames), 0
+	local cap, alive_hostile, mates = state.hostile.cap(state.frames), 0, {}   -- 1.4.0: turned SEAF alive now, and the waiting members of each squad
+	for _, q in ipairs(units.soldiers_list) do
+		if q.side == side then alive_hostile = alive_hostile + 1
+		elseif q.side == SIDE_HOME then local qg = rebel.fate[q.id]; if qg then mates[qg] = (mates[qg] or 0) + 1 end end
+	end
+	local function loyal_one(s)   -- the squad's verdict on this soldier; the first sighting is logged
+		local pos
+		if not rebel.fate[s.id] and state.unit_position then pos = state.unit_position(s) end
+		local loyal, g, new, d = state.hostile.assign(s.id, pos, state.frames, pct)
+		if new and state.probe_soldier then pcall(state.probe_soldier, s) end
+		if new then
+			log(string.format("SEAF SQUAD %d: soldier %x %s; %s; squad coin %d, share %d percent: %s", g.number, s.id,
+				pos and string.format("at %.1f %.1f %.1f", pos.x, pos.y, pos.z) or "(position unreadable)",
+				g.n == 1 and "first of a new squad" or (d and string.format("joins it, %.0f m from its first, %d members now", d, g.n) or string.format("joins it (arrived within a second of its first), %d members now", g.n)),
+				g.coin, pct, loyal and "stays loyal" or "turns once the squad is on the ground"))
+		end
+		return loyal or g.capped == true
+	end
+	local function ground_ok(s)   -- true once the soldier's squad has reached the ground (1.3.1)
+		local pos = state.unit_position and state.unit_position(s) or nil
+		local ok, how, just = state.hostile.ready(s.id, pos, state.frames)
+		local sq = rebel.fate[s.id]
+		if sq and sq.capped then return false end
+		if just and cap > 0 and sq then   -- 1.4.0: the cap is checked once, when the squad is ready to turn
+			local size = mates[sq] or 1
+			if alive_hostile + size > cap then
+				sq.capped = true; rebel.capped_n = rebel.capped_n + 1
+				log(string.format("SEAF SQUAD %d HELD BACK BY THE CAP: its %d soldiers would make %d turned SEAF alive, the cap is %d; it stays loyal", sq.number, size, alive_hostile + size, cap))
+				return false
+			end
+			alive_hostile = alive_hostile + size
+			log(string.format("SEAF SQUAD %d CLEARED BY THE CAP: %d soldiers, %d turned SEAF alive after it, the cap is %d", sq.number, size, alive_hostile, cap))
+		end
+		if just then
+			local g, tr, zs = rebel.fate[s.id], rebel.trace[rebel.fate[s.id].seed], {}
+			for _, q in ipairs(tr and tr.zs or {}) do zs[#zs + 1] = string.format("%d:%.1f", q.f - tr.first, q.z) end
+			log(string.format("SEAF SQUAD %d ON THE GROUND (%s): %d of %d landed, %d frames since its first soldier was seen; first soldier's height by frames since seen: %s",
+				g.number, how, g.landed_n or 0, g.n, state.frames - g.frame, #zs > 0 and table.concat(zs, " ") or "(no position)"))
+		end
+		return ok
+	end
 	for _, s in ipairs(units.soldiers_list) do
 		local function fits(v) return v == SIDE_HOME or v == side end
 		if fits(s.side) and fits(s.copy) then
 			local at = detector_copy_at(t, s.id)
 			if not at then say_once("nodet", "a SEAF soldier has no detector record; such soldiers are left alone")
+			elseif s.side == SIDE_HOME and fits(u32(at)) and loyal_one(s) then
+				if not rebel.loyal[s.id] then rebel.loyal[s.id] = true; rebel.loyal_n = rebel.loyal_n + 1; kept_now = kept_now + 1 end
+			elseif fits(u32(at)) and s.side == SIDE_HOME and not ground_ok(s) then
+				-- still in the air (or its squad is): left alone, so the loyal SEAF have nothing to shoot at
 			elseif fits(u32(at)) then
+				if rebel.loyal[s.id] then rebel.loyal[s.id] = nil; rebel.loyal_n = rebel.loyal_n - 1 end   -- the share was raised: this one turns now
 				local wrote, err = move(s, at, SIDE_HOME, side)
 				if not wrote then say_once("write", "could not set a soldier, nothing changed on him: " .. err)
 				elseif wrote > 0 then
@@ -984,6 +1251,9 @@ local function set_soldiers(units)
 				end
 			end
 		end
+	end
+	if kept_now > 0 then
+		log(string.format("SEAF KEPT LOYAL: %d soldier%s stay with the Helldivers (hostile share %d percent; %d loyal so far)", kept_now, kept_now == 1 and "" or "s", pct, rebel.loyal_n))
 	end
 	if n > 0 then
 		rebel.set = rebel.set + n
@@ -1069,7 +1339,9 @@ local CARD_WAIT, CARD_RETRY = 1800, 1800   -- frames after landing before the fi
 local PICK_TITLE, PICK_SUB = "NEW INTELLIGENCE DISCOVERED", "FIND THE INTEL AND GET IT TO THE DESTROYER."
 local MOVED_TITLE, MOVED_SUB = "INTEL MOVED", "THE NEW LOCATION IS MARKED ON YOUR TACTICAL MAP."
 local AREA_RADIUS, AREA_OFF_MIN, AREA_OFF_MAX = 40, 5, 25   -- metres: the map marker's search area around a spot this far off the card
-local card = { off = nil, mission = false, since = 0, next_look = 0, chosen = nil, found = false, lore = nil }
+local card = { off = nil, mission = false, since = 0, next_look = 0, chosen = nil, found = false, lore = nil,
+	band_min = 60, band_max = 250, step = 50,   -- 1.1.0: the pick's distance band (metres) from the shared anchor, and the anchor's rounding
+	rejected = {}, rerolls = 0, last_reroll = -1000, rr_id = "vibeslacker.chaos_divers.reroll", rr_label = "Re-roll Intel" }
 state.card = card
 math.randomseed(os.time())
 
@@ -1136,6 +1408,40 @@ local function unit_pos(t, unit)
 	return { x = x, y = y, z = z }
 end
 local function position(unit) return unit_pos(unit_table(), unit) end
+-- 1.3.3: a SEAF soldier's engine handle is the word at unit + 12 of its list entry (found by the 1.3.2 probe); its list id (unit + 8) is not.
+function state.unit_position(sol)
+	if not (sol and sol.unit and readable(sol.unit, 16)) then return nil end
+	local h = u32(sol.unit + 12)
+	if h == 0 or h == 0xFFFFFFFF then return nil end
+	return unit_pos(unit_table(), h)
+end
+-- 1.3.2: why does a soldier have no position? Its list id (0x358, ...) is not what the unit table is keyed by. For the first 8 soldiers of a
+-- mission, log the unit struct's first 16 words, what the unit table holds at the id's index, and any word that does give a position.
+function state.probe_soldier(sol)
+	if rebel.probe_n >= 8 then return end
+	rebel.probe_n = rebel.probe_n + 1
+	local t, words, slot, found = unit_table(), {}, "no unit table", {}
+	if sol.unit and readable(sol.unit, 64) then for i = 0, 15 do words[#words + 1] = string.format("%X", u32(sol.unit + 4 * i)) end end
+	if t then
+		local i = bit.band(sol.id, 0x3FFFFF)
+		slot = string.format("table index %d of %d", i, t.n)
+		if i < t.n and readable(t.objs + 8 * i, 8) then
+			local obj = ptr(t.objs + 8 * i)
+			slot = slot .. ((obj and readable(obj + 8, 4)) and string.format(", its id field %X", u32(obj + 8)) or ", empty")
+		end
+		if #words > 0 then
+			for i = 3, 15 do
+				local v = u32(sol.unit + 4 * i)
+				if v ~= 0 and v ~= 0xFFFFFFFF then
+					local p = unit_pos(t, v)
+					if p then found[#found + 1] = string.format("word %d = %X -> %.1f %.1f %.1f", i, v, p.x, p.y, p.z) end
+				end
+			end
+		end
+	end
+	log(string.format("POSITION PROBE soldier %x: unit struct words %s; %s; %s", sol.id, #words > 0 and table.concat(words, " ") or "(unreadable)", slot,
+		#found > 0 and table.concat(found, "; ") or "no word gives a position"))
+end
 
 local function dist(a, b)
 	local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
@@ -1172,22 +1478,60 @@ local function where(p) return string.format("%.1f %.1f %.1f", p.x, p.y, p.z) en
 -- The same card on every machine in the mission (0.28): the lore objects sorted by where they stand (to the
 -- metre), and the pick and the search area's offset taken from a hash of all their positions. Two games that
 -- see the same objects pick the same card; the fingerprint in the log shows whether they did. Sorts lore.
-local function card_pick(lore)
+local function card_pick(lore, anchor, skip, n, keep)
 	local function key(it) return { math.floor(it.pos.x + 0.5), math.floor(it.pos.y + 0.5), math.floor(it.pos.z + 0.5) } end
-	for _, it in ipairs(lore) do it.key = key(it) end
+	for _, it in ipairs(lore) do it.key = key(it); it.ks = it.key[1] .. "," .. it.key[2] .. "," .. it.key[3] end
 	table.sort(lore, function (a, b)
 		for i = 1, 3 do if a.key[i] ~= b.key[i] then return a.key[i] < b.key[i] end end
 		return a.res < b.res
 	end)
 	local parts = {}
-	for i, it in ipairs(lore) do parts[i] = it.key[1] .. "," .. it.key[2] .. "," .. it.key[3] end
+	for i, it in ipairs(lore) do parts[i] = it.ks end
 	local text = table.concat(parts, ";")
 	local seed, spin = fnv1(text), fnv1(text .. ";area")
 	local a = (spin % 3600) / 3600 * 2 * math.pi
 	local off = AREA_OFF_MIN + (math.floor(spin / 3600) % 1000) / 1000 * (AREA_OFF_MAX - AREA_OFF_MIN)
-	return lore[seed % #lore + 1], a, off, seed
+	-- 1.1.0: the candidates. With an anchor (the centroid of all Helldivers, rounded) only objects 60 to 250 m from it
+	-- (flat distance) count; none there: the nearest beyond the band, else the farthest closer one. Anything rejected by
+	-- a re-roll is skipped; every object rejected: start over. The index comes from the fingerprint, or from it plus
+	-- the re-roll count, so every copy that agrees on the objects and the count agrees on the pick.
+	local pool, how = {}, "no anchor, any object"
+	local function open(it) return not (skip and skip[it.ks]) end
+	if anchor then
+		for _, it in ipairs(lore) do it.from = math.sqrt((it.pos.x - anchor.x) ^ 2 + (it.pos.y - anchor.y) ^ 2) end
+		for _, it in ipairs(lore) do if open(it) and it.from >= card.band_min and it.from <= card.band_max then pool[#pool + 1] = it end end
+		how = "inside the band"
+		if #pool == 0 then
+			local best
+			for _, it in ipairs(lore) do if open(it) and it.from > card.band_max and (not best or it.from < best.from) then best = it end end
+			if best then pool, how = { best }, "none in the band: the nearest beyond it"
+			else
+				for _, it in ipairs(lore) do if open(it) and (not best or it.from > best.from) then best = it end end
+				if best then pool, how = { best }, "none in the band: the farthest of those closer" end
+			end
+		end
+	else
+		for _, it in ipairs(lore) do if open(it) then pool[#pool + 1] = it end end
+	end
+	local reset
+	if #pool == 0 then
+		reset = true
+		local pick, a2, off2, seed2, pool2, how2 = card_pick(lore, anchor, keep and { [keep] = true } or nil, n)   -- (keep: the one just rejected stays out, unless it is the only one)
+		return pick, a2, off2, seed2, pool2, how2, reset
+	end
+	local pickseed = (n and n > 0) and fnv1(text .. ";reroll " .. n) or seed
+	return pool[pickseed % #pool + 1], a, off, seed, pool, how, reset
 end
 state.test.card_pick = card_pick
+
+-- The shared anchor of the pick (1.1.0): the centroid of every Helldiver's flat position, rounded to 50 m. nil with none.
+function card.anchor(divers)
+	if not divers or #divers == 0 then return nil end
+	local sx, sy = 0, 0
+	for _, p in ipairs(divers) do sx, sy = sx + p.x, sy + p.y end
+	local n, st = #divers, card.step
+	return { x = math.floor(sx / n / st + 0.5) * st, y = math.floor(sy / n / st + 0.5) * st }
+end
 
 local function card_look()
 	local all, why, divers = inventory()
@@ -1199,9 +1543,21 @@ local function card_look()
 		census[z] = (census[z] or 0) + 1
 	end
 	card.lore = lore
-	local pick, a, off, seed
-	if #lore > 0 then pick, a, off, seed = card_pick(lore) end
-	for i, it in ipairs(lore) do log(string.format("key card: lore object %d of %d: %s at %s", i, #lore, it.res, where(it.pos))) end
+	local pick, a, off, seed, pool, how, reset
+	local anchor = card.anchor(divers)
+	if #lore > 0 then pick, a, off, seed, pool, how, reset = card_pick(lore, anchor, card.rejected, card.rerolls, card.last_rejected) end
+	if reset then card.rejected = (#lore > 1 and card.last_rejected) and { [card.last_rejected] = true } or {} end
+	local me = divers and divers[1]
+	if anchor then
+		log(string.format("key card: anchor %.0f %.0f (centroid of %d Helldivers, rounded to %d m); first Helldiver at %s", anchor.x, anchor.y, #divers, card.step, where(me)))
+	else
+		log("key card: no Helldiver position readable, so no anchor; any lore object may be picked")
+	end
+	for i, it in ipairs(lore) do
+		log(string.format("key card: lore object %d of %d: %s at %s%s%s", i, #lore, it.res, where(it.pos),
+			it.from and string.format(", %.0f m from the anchor%s", it.from, (it.from >= card.band_min and it.from <= card.band_max) and " (in the band)" or "") or "",
+			me and string.format(", %+.1f m height against the first Helldiver", it.pos.z - me.z) or ""))
+	end
 	local parts = {}
 	for z, n in pairs(census) do parts[#parts + 1] = { z = z, n = n } end
 	table.sort(parts, function (a, b) return (tonumber(a.z) or 999) < (tonumber(b.z) or 999) end)
@@ -1213,13 +1569,22 @@ local function card_look()
 	end
 	local lost = card.lost_at
 	card.lost_at = nil
+	local rerolled = card.reroll_pending
+	card.reroll_pending = nil
 	local moved
 	if lost then card.chosen, moved = nearest_lore(lore, lost) else card.chosen = pick end
 	log(string.format("key card: fingerprint %08x over %d lore objects (the same in every game that sees the same map)", seed, #lore))
+	if not lost then
+		log(string.format("key card: %d candidates, %s; re-rolls so far %d, rejected %d%s", #pool, how, card.rerolls, (function () local c = 0 for _ in pairs(card.rejected) do c = c + 1 end return c end)(),
+			reset and " (every object had been rejected, so the list was cleared except the one just rejected)" or ""))
+	end
 	card.area = { x = card.chosen.pos.x + off * math.cos(a), y = card.chosen.pos.y + off * math.sin(a) }
 	log(string.format("map marker: search area %.0f m around %.1f %.1f (the card is %.0f m from its centre)", AREA_RADIUS, card.area.x, card.area.y, off))
 	if moved then
 		log(string.format("key card: the replacement is the lore object nearest the lost one, %.0f m from where it was", moved))
+		banner_show(MOVED_TITLE, MOVED_SUB)
+	elseif rerolled then
+		log(string.format("key card: re-roll %d picked another object", card.rerolls))
 		banner_show(MOVED_TITLE, MOVED_SUB)
 	elseif not card.notified then
 		card.notified = true
@@ -1230,11 +1595,27 @@ local function card_look()
 		#lore, #all, card.chosen.res, where(card.chosen.pos), d and string.format(", %.0f m from you", d) or ""))
 end
 
+-- The re-roll key (1.1.0): throw the current intel away (it cannot be reached) and pick another, never one already
+-- rejected. Counter-seeded: every copy that presses it the same number of times lands on the same object.
+function card.reroll(frame)
+	if card.off or cfg.card ~= 1 or not card.mission or card.found then return end
+	if frame - card.last_reroll < 120 then return end
+	if not card.chosen then log("re-roll ignored: there is no intel picked right now") return end
+	card.last_reroll = frame
+	card.rejected[card.chosen.ks], card.last_rejected = true, card.chosen.ks
+	card.rerolls = card.rerolls + 1
+	log(string.format("RE-ROLL %d: the intel at %s is rejected; picking another", card.rerolls, where(card.chosen.pos)))
+	card.chosen, card.reroll_pending, card.next_look = nil, true, 0
+end
+
 -- Called with the unit pass: tracks the mission and picks the card.
 local function card_tick(units)
 	if card.off or cfg.card ~= 1 or not engine then return end
 	if not units or units.where ~= "mission" then
-		if card.mission then card.mission, card.chosen, card.found, card.lore, card.area, card.notified, card.lost_at = false, nil, false, nil, nil, nil, nil end
+		if card.mission then
+			card.mission, card.chosen, card.found, card.lore, card.area, card.notified, card.lost_at = false, nil, false, nil, nil, nil, nil
+			card.rejected, card.rerolls, card.reroll_pending, card.last_rejected = {}, 0, nil, nil
+		end
 		return
 	end
 	if not card.mission then
@@ -1683,10 +2064,13 @@ local function watch()
 			log("TALLY GUARD cannot read the tally: " .. no .. ". The traitor tally is NOT being held down.")
 		end
 	end
+	state.hostile.value(state.frames)   -- registers the slider and follows it, also before rebel mode is on
 	local key = key_pressed(state.frames, cfg.key)
+	local reroll = cfg.card == 1 and not card.off and not rebel.on and key_pressed(state.frames, cfg.reroll, state.menu_reroll, card.rr_id, card.rr_label, true)
 	local interact = cfg.card == 1 and not card.off and not rebel.on and pressed(ikey.key(state.frames))
-	if not (key or interact or state.frames % (rebel.on and 5 or 15) == 0) then return end
+	if not (key or interact or reroll or state.frames % (rebel.on and 5 or 15) == 0) then return end
 	local units, why = read_units()
+	if reroll and units and units.where == "mission" then card.reroll(state.frames) end
 	local found = false
 	if interact and not key then
 		local okf, res = pcall(card_interact, units)

@@ -3,20 +3,12 @@ Backstory, by vibeslacker
 
 THE STORY
 
-It starts as a routine drop.
-
-Then the truth comes out. The SEAF squads on the ground are enemy
-sympathisers. They are the ones who have been building the broadcast
-towers and sabotaging Super Earth from the inside.
-
-Caught in the open, and too arrogant to hide it any longer, they turn
-their guns on the Helldivers. They fight alongside whoever holds the
-planet: the Illuminate on squid worlds, the Terminids on bug worlds,
-the Automatons on bot worlds.
-
-Command is behind, lacking the intel. It still calls in SEAF as
-friendly support and still lists them as allies on the comms. They are
-not. Every Pelican that lands brings more dissidents to the fight.
+It starts as a routine drop. Then the truth comes out: there is a cell
+of enemy sympathizers, the ones who have been building the broadcast
+towers and sabotaging Super Earth from the inside. Caught in the open,
+they turn on the Helldivers and fight alongside whoever holds the
+planet. Command is desperate for intel package. It needs to be
+returned to the Super Destroyer at mission completion.
 
 
 COMMS BLACKOUT
@@ -51,7 +43,7 @@ IN GAME
 When rebel mode switches on, the screen shows:
 
     DISSIDENT CELL DISCOVERED
-    SEAF FORCES HAVE TURNED HOSTILE.
+    ENEMY SYMPATHIZERS HAVE TURNED HOSTILE.
 
 Rebel SEAF fight with the enemy holding the map. Your guard dog and
 sentries stay on your side and engage the rebels. Killing rebels does

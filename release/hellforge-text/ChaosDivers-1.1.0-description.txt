@@ -1,0 +1,43 @@
+It starts as a routine drop. Then the truth comes out: there is a cell of enemy sympathizers, the ones who have been building the broadcast towers and sabotaging Super Earth from the inside. Caught in the open, they turn on the Helldivers and fight alongside whoever holds the planet. Command is desperate for intel package. It needs to be returned to the Super Destroyer at mission completion.
+
+What it does
+
+About half a minute into a mission, "NEW INTELLIGENCE DISCOVERED" shows and an INTEL ring appears on your tactical map, 60 to 250 m from where your squad starts. The intel is one of the lore objects inside the ring. Press your interact key (E by default) at it to take it. That exposes the cell: "DISSIDENT CELL DISCOVERED" shows, and SEAF squads turn hostile and side with the enemy holding the planet (bugs, squids or bots).
+
+Not every squad turns. Two sliders on the MODS options page set how hard it is:
+HOSTILE SEAF (PERCENT), default 50: how many squads turn. Each squad is decided as one, so you get a hostile squad dropping in next to a loyal one. A little chaos, a little fog of war.
+MAX HOSTILE SEAF AT ONCE, default 30: the most turned SEAF that can be alive at the same time. A squad that would go past it stays loyal, so the fight stays hard instead of a wipe.
+
+A squad that is going to turn stays friendly while it drops in, so the loyal SEAF do not shoot it out of the sky and give it away. It turns once it is on the ground. SEAF already standing there when you take the intel turn at once.
+
+Your guard dog and sentries stay on your side and fight the rebels. Killing rebels does not mark you as a traitor and the destroyer does not come for you. The mod switches itself off when the mission ends, and stays on when you die and reinforce.
+
+Needs SEAF on the map
+
+HellForge does not apply the Heavy SEAF Presence planet modifier, so no SEAF drop in by themselves. Tested with the HellForge mod Heavy SEAF Presence Everywhere, which drops SEAF squads in. Without a source of SEAF, the mod loads and the intel shows, but there is nothing to turn.
+
+Requirements
+
+HellForge on game build 25480438, and Bingus Shared Loader v15 or newer, loaded last. After a game update the mod checks the game's code first. If something has changed it switches itself off and says why in its log.
+
+Install
+
+Close the game. Add this zip and the Bingus Shared Loader zip on the HellForge Mods page, or drop them in Documents/HellForge/mods. Enable both, loader last. Start the game, drop on a planet with SEAF, find the intel.
+
+Playing together
+
+Private lobbies with friends who know, never public games. Everyone with the mod sees the same intel and ring, and any player can take the intel. The SEAF AI runs on the host, so the host's sliders are the ones that count. Whether a squadmate taking the intel (not the host) turns the SEAF for the whole squad is not proven, so the host taking it is the sure way. Squadmates without the mod still get shot at by the rebels, and their kills are kept off the traitor count.
+
+Settings
+
+ChaosDivers.cfg is written in the CowboyBingus log folder the first time you start the game with the mod, with every setting explained: which enemy the rebels side with, the share and the cap, how long a dropping squad waits, the banner, the map ring, and optional keys (including one to throw the intel away and pick another if you cannot reach it).
+
+Known limits
+
+Tested on HellForge 0.3.0 on Linux. Windows and co-op are untested. The requisition fine for killing SEAF may still apply. If your mission recap shows a fine, report it. Bot missions with SEAF are untested.
+
+Use it at your own risk. This mod changes game memory while the game runs. No network access, nothing leaves your computer. For bug reports, send ChaosDivers.log and ChaosDivers.previous.log and say what you saw.
+
+Credits
+
+CowboyBingus for Bingus Shared Loader. Made with AI.
