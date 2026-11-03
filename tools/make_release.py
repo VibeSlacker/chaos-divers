@@ -19,6 +19,7 @@ def main():
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for extra in ("manifest.json", "README.txt"):
             z.write(os.path.join(release, extra), extra)
+        z.write(os.path.join(release, "..", "LICENSE"), "LICENSE.txt")
         for suffix in ("", ".gpu_resources", ".stream"):
             f = ARCHIVE + ".patch_0" + suffix
             z.write(os.path.join(build, f), "Addon/" + f)

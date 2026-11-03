@@ -23,6 +23,10 @@ python3 ../tools/make_release.py build ../release Chaos-Divers-Dissidents-Among-
 - `addon/data/` holds the code signatures for game build 25480438; `addon/tools/make_sigs.py` remakes them from a dump of the game's code after an update.
 - `addon/test/harness.lua` runs the built mod against a fake game, frame by frame. It proves the mod's own logic, not the game's layout.
 
+## License
+
+MIT License, copyright (c) 2026 vibeslacker; the full text is in [`LICENSE`](LICENSE). If you use this mod or its idea in your own work, please credit vibeslacker for the idea.
+
 ## Thanks
 
 CowboyBingus for Bingus Shared Loader.

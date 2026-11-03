@@ -144,5 +144,9 @@ UNINSTALL
 Close the game, disable or remove the mod. Delete the ChaosDivers files in
 the log folder if you want no trace.
 
+LICENSE
+MIT License, copyright (c) 2026 vibeslacker. The full text is in LICENSE.txt.
+If you use this mod or its idea in your own work, please credit vibeslacker for the idea.
+
 THANKS
 CowboyBingus for Bingus Shared Loader.
